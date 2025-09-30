@@ -162,6 +162,10 @@ export const uploadToS3 = async (req: any, res: any) => {
       process.env.CLOUDFRONT_PRIVATE_KEY ||
       fs.readFileSync("./private_key.pem", "utf8");
 
+    console.log("privateKey", privateKey);
+    console.log("distributionDomain", distributionDomain);
+    console.log("keyPairId", keyPairId);
+
     let fileUrl: string;
     if (distributionDomain && keyPairId && privateKey) {
       fileUrl = getSignedUrl({
@@ -190,9 +194,8 @@ export const uploadToS3 = async (req: any, res: any) => {
 
 const distributionDomain = process.env.CLOUDFRONT_DOMAIN;
 const keyPairId = process.env.CLOUDFRONT_KEY_PAIR_ID;
-const privateKey =
-  process.env.CLOUDFRONT_PRIVATE_KEY 
-  // || fs.readFileSync("./private_key.pem", "utf8");
+const privateKey = process.env.CLOUDFRONT_PRIVATE_KEY;
+// || fs.readFileSync("./private_key.pem", "utf8");
 
 /**
  * Generate a CloudFront signed URL (or fallback S3 public URL)
