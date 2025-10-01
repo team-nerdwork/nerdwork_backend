@@ -21,7 +21,7 @@ const HELIO_PRIVATE_KEY = process.env.HELIO_PRIVATE_KEY;
 const WEBHOOK_REDIRECT_URL = process.env.WEBHOOK_REDIRECT_URL;
 const HELIO_WALLET_ID = process.env.HELIO_WALLET_ID;
 const HELIO_PCURRENCY = process.env.HELIO_PCURRENCY;
-const HELIO_AMOUNT = process.env.HELIO_AMOUNT;
+const HELIO_AMOUNT = Number(process.env.HELIO_AMOUNT);
 
 import jwt from "jsonwebtoken";
 import {
