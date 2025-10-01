@@ -162,10 +162,6 @@ export const uploadToS3 = async (req: any, res: any) => {
       process.env.CLOUDFRONT_PRIVATE_KEY ||
       fs.readFileSync("./private_key.pem", "utf8");
 
-    console.log("privateKey", privateKey);
-    console.log("distributionDomain", distributionDomain);
-    console.log("keyPairId", keyPairId);
-
     let fileUrl: string;
     if (distributionDomain && keyPairId && privateKey) {
       fileUrl = getSignedUrl({

@@ -21,6 +21,7 @@ const HELIO_PRIVATE_KEY = process.env.HELIO_PRIVATE_KEY;
 const WEBHOOK_REDIRECT_URL = process.env.WEBHOOK_REDIRECT_URL;
 const HELIO_WALLET_ID = process.env.HELIO_WALLET_ID;
 const HELIO_PCURRENCY = process.env.HELIO_PCURRENCY;
+const HELIO_AMOUNT = process.env.HELIO_AMOUNT;
 
 import jwt from "jsonwebtoken";
 import {
@@ -60,7 +61,7 @@ export const createPaymentLink = async (req: any, res: any) => {
     // Prepare DTO for Helio
     const createPaylinkDto: CreatePaylinkWithApiDto = {
       name: "NWT_PURCHASE", // Unique name for each payment link
-      price: (Number(amount) * 100000).toString(), // Ensure amount is a number
+      price: (Number(amount) * HELIO_AMOUNT).toString(), // Ensure amount is a number
       pricingCurrency: HELIO_PCURRENCY,
       description: `Payment for Nerd Work Token by ${userId} on ${new Date().toISOString()} amount: ${amount} `,
       features: {},
