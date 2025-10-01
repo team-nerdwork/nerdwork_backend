@@ -78,7 +78,7 @@ export const createPaymentLink = async (req: any, res: any) => {
     const helioResponse = await sdk.paylink.create(createPaylinkDto);
 
     // Calculate NWT amount (assuming 1 USD = 90.49 NWT based on your frontend calculation)
-    const nwtAmount = amount * 100; // This should match your frontend calculation
+    const nwtAmount = amount * 10; // This should match your frontend calculation
 
     // Create user purchase transaction record
     const transactionResult = await createUserPurchaseTransaction(
