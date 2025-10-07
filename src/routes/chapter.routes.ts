@@ -7,6 +7,7 @@ import {
   deleteChapter,
   fetchAllPaidChapters,
   fetchChapterByUniqueCode,
+  fetchChapterByUniqueCodeForCreators,
   fetchChapterPagesById,
   fetchChaptersByComicSlugForCreators,
   fetchChaptersByComicSlugForReaders,
@@ -180,6 +181,30 @@ router.get("/by-comic/reader/:slug", fetchChaptersByComicSlugForReaders);
  *         description: Server error
  */
 router.get("/by-code/:code", fetchChapterByUniqueCode);
+
+/**
+ * @swagger
+ * /chapters/creators/by-code/{code}:
+ *   get:
+ *     summary: Fetch a chapter by unique code for creators
+ *     tags:
+ *       - Chapters
+ *     parameters:
+ *       - in: path
+ *         name: code
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Unique code of the chapter
+ *     responses:
+ *       200:
+ *         description: Chapter details
+ *       404:
+ *         description: Chapter not found
+ *       500:
+ *         description: Server error
+ */
+router.get("/creators/by-code/:code", fetchChapterByUniqueCodeForCreators);
 
 /**
  * @swagger

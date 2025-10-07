@@ -369,6 +369,50 @@ export const fetchChapterByUniqueCode = async (req, res) => {
   }
 };
 
+export const fetchChapterByUniqueCodeForCreators = async (req, res) => {
+  try {
+    const { code } = req.params;
+
+    const [chapter] = await db
+      .select()
+      .from(chapters)
+      .where(eq(chapters.uniqueCode, code));
+
+    if (!chapter) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Chapter not found" });
+    }
+
+    const { likesCount } = await getChapterLikes(chapter.id);
+    const { viewsCount } = await getChapterViews(chapter.id);
+
+    const data = {
+      id: chapter.id,
+      title: chapter.title,
+      chapterType: chapter.chapterType,
+      chapterStatus: chapter.chapterStatus,
+      price: chapter.price,
+      summary: chapter.summary,
+      pages: mapFilesToUrls(chapter.pages),
+      serialNo: chapter.serialNo,
+      uniqueCode: chapter.uniqueCode,
+      createdAt: chapter.createdAt,
+      updatedAt: chapter.updatedAt,
+      likesCount,
+      viewsCount,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (err: any) {
+    console.error("Fetch Chapter by Code Error:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 export const publishDraft = async (req, res) => {
   try {
     const { draftUniqCode, comicId } = req.body;
