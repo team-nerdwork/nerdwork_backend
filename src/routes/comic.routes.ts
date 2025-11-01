@@ -6,6 +6,7 @@ import {
   fetchAllComics,
   fetchComicBySlugForReaders,
   deleteComicBySlug,
+  subscribeForcomic,
 } from "../controller/comic.controller";
 
 const router = Router();
@@ -16,6 +17,7 @@ router.get("/all-comics", fetchAllComics);
 router.get("/:slug", fetchComicBySlug);
 router.get("/reader/:slug", fetchComicBySlugForReaders);
 router.delete("/delete/:slug", deleteComicBySlug);
+router.post("/subscribe/:comicId", subscribeForcomic);
 
 /**
  * @swagger
@@ -216,6 +218,57 @@ router.delete("/delete/:slug", deleteComicBySlug);
  *         description: comic not found
  *       500:
  *         description: Server error
+ */
+
+/**
+ * @swagger
+ * /comics/subscribe/{comicId}:
+ *   post:
+ *     summary: Subscribe or unsubscribe to a comic
+ *     description: Toggles subscription for the given comic. If already subscribed, the user will be unsubscribed; otherwise, they will be subscribed.
+ *     tags: [Comics]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: comicId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The unique identifier of the comic
+ *         example: "comic_abc123"
+ *     responses:
+ *       200:
+ *         description: Subscription status updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Comic subscribed"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     comicId:
+ *                       type: string
+ *                       example: "comic_abc123"
+ *                     subscribed:
+ *                       type: boolean
+ *                       example: true
+ *                     subscribersCount:
+ *                       type: number
+ *                       example: 120
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Comic or Reader not found
+ *       500:
+ *         description: Internal server error
  */
 
 /**

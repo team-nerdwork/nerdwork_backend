@@ -7,6 +7,7 @@ import {
   pgEnum,
   uuid,
   doublePrecision,
+  unique,
 } from "drizzle-orm/pg-core";
 import { comics, comicStatusEnum } from "./comic"; // assuming you already have comics entity
 import { readerProfile } from "./profile";
@@ -42,4 +43,32 @@ export const paidChapters = pgTable("paid_Chapters", {
     .references(() => chapters.id, { onDelete: "cascade" }),
   paidAt: timestamp("paid_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+});
+
+export const chapterViews = pgTable("chapter_views", {
+  id: uuid("id").primaryKey().defaultRandom(),
+
+  readerId: uuid("reader_id")
+    .notNull()
+    .references(() => readerProfile.id, { onDelete: "cascade" }),
+
+  chapterId: uuid("chapter_id")
+    .notNull()
+    .references(() => chapters.id, { onDelete: "cascade" }),
+
+  viewedAt: timestamp("viewed_at").defaultNow().notNull(),
+});
+
+export const chapterLikes = pgTable("chapter_likes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+
+  readerId: uuid("reader_id")
+    .notNull()
+    .references(() => readerProfile.id, { onDelete: "cascade" }),
+
+  chapterId: uuid("chapter_id")
+    .notNull()
+    .references(() => chapters.id, { onDelete: "cascade" }),
+
+  viewedAt: timestamp("viewed_at").defaultNow().notNull(),
 });

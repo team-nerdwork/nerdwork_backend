@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../config/db";
 import {
   creatorProfile,
@@ -14,13 +14,14 @@ import {
   CreatePaylinkWithApiDto,
 } from "@heliofi/common";
 
-const HELIO_API_BASE = "https://api.dev.hel.io/v1";
-// const HELIO_API_BASE = "https://api.hel.io/v1"; // For production
+// const HELIO_API_BASE = "https://api.dev.hel.io/v1";
+const HELIO_API_BASE = "https://api.hel.io/v1"; // For production
 const HELIO_PUBLIC_KEY = process.env.HELIO_PUBLIC_KEY;
 const HELIO_PRIVATE_KEY = process.env.HELIO_PRIVATE_KEY;
 const WEBHOOK_REDIRECT_URL = process.env.WEBHOOK_REDIRECT_URL;
 const HELIO_WALLET_ID = process.env.HELIO_WALLET_ID;
 const HELIO_PCURRENCY = process.env.HELIO_PCURRENCY;
+const HELIO_AMOUNT = Number(process.env.HELIO_AMOUNT);
 
 import jwt from "jsonwebtoken";
 import {
@@ -29,6 +30,7 @@ import {
   updateUserWalletBalance,
 } from "./transaction.controller";
 import { userTransactions } from "../model/userTransaction";
+import { getUserJwtFromToken } from "./library.controller";
 
 export const createPaymentLink = async (req: any, res: any) => {
   const authHeader = req.headers.authorization;
@@ -59,7 +61,7 @@ export const createPaymentLink = async (req: any, res: any) => {
     // Prepare DTO for Helio
     const createPaylinkDto: CreatePaylinkWithApiDto = {
       name: "NWT_PURCHASE", // Unique name for each payment link
-      price: (Number(amount) * 1000000).toString(), // Ensure amount is a number
+      price: (Number(amount) * HELIO_AMOUNT).toString(), // Ensure amount is a number
       pricingCurrency: HELIO_PCURRENCY,
       description: `Payment for Nerd Work Token by ${userId} on ${new Date().toISOString()} amount: ${amount} `,
       features: {},
@@ -76,13 +78,13 @@ export const createPaymentLink = async (req: any, res: any) => {
     const helioResponse = await sdk.paylink.create(createPaylinkDto);
 
     // Calculate NWT amount (assuming 1 USD = 90.49 NWT based on your frontend calculation)
-    const nwtAmount = amount * 100; // This should match your frontend calculation
+    const nwtAmount = amount * 10; // This should match your frontend calculation
 
     // Create user purchase transaction record
     const transactionResult = await createUserPurchaseTransaction(
       userId,
       nwtAmount,
-      amount/ 100, // USD amount
+      amount, // USD amount
       helioResponse.id,
       `Purchase ${nwtAmount} NWT for $${amount} via Helio`
     );
@@ -191,8 +193,10 @@ export const handlePayment = async (req: any, res: any) => {
     }
 
     const { transactionSignature, status, statusToken } = data;
-    
-    const transaction = await sdk.transaction.getTransaction(transactionSignature);
+
+    const transaction = await sdk.transaction.getTransaction(
+      transactionSignature
+    );
 
     console.log("Processing webhook:", {
       status,
@@ -221,19 +225,22 @@ export const handlePayment = async (req: any, res: any) => {
         transaction.meta.transactionDataHash,
         {
           blockchainSymbol: transaction.paymentRequestCurrencySymbol,
-                    senderPK,
-                    statusToken,
-                    webhookData: req.body
+          senderPK,
+          statusToken,
+          webhookData: req.body,
         }
       );
+      console.log("Transaction update result:", updateResult);
 
       if (updateResult.success && updateResult.transaction) {
         // Update user wallet balance
         const balanceResult = await updateUserWalletBalance(
-                    updateResult.transaction.userId,
-                    parseFloat((Number(updateResult.transaction.usdAmount)* 100).toFixed(0)),
-                    'add'
-                );
+          updateResult.transaction.userId,
+          parseFloat(Number(updateResult.transaction.nwtAmount).toFixed(0)),
+          "add"
+        );
+        console.log("Balance update result:", balanceResult);
+
         console.log("Transaction completed:", {
           transactionId: updateResult.transaction.id,
           balanceUpdated: balanceResult.success,
@@ -249,10 +256,10 @@ export const handlePayment = async (req: any, res: any) => {
         "failed",
         transaction.meta.transactionDataHash,
         {
-         blockchainSymbol: transaction.paymentRequestCurrencySymbol,
-                    senderPK,
-                    statusToken,
-                    webhookData: req.body
+          blockchainSymbol: transaction.paymentRequestCurrencySymbol,
+          senderPK,
+          statusToken,
+          webhookData: req.body,
         },
         `Payment failed with status: ${status}`
       );
@@ -267,15 +274,7 @@ export const handlePayment = async (req: any, res: any) => {
 
 export const fetchTransactionByJwtForReaders = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const token = authHeader.split(" ")[1];
-    const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
-
-    const userId = decoded.userId;
+    const userId = getUserJwtFromToken(req);
 
     const [reader] = await db
       .select()
@@ -288,7 +287,8 @@ export const fetchTransactionByJwtForReaders = async (req, res) => {
     const userTransaction = await db
       .select()
       .from(userTransactions)
-      .where(eq(userTransactions.userId, reader.id));
+      .where(eq(userTransactions.userId, reader.id))
+      .orderBy(desc(userTransactions.createdAt));
 
     return res.json({ transaction: userTransaction });
   } catch (err) {
@@ -299,15 +299,7 @@ export const fetchTransactionByJwtForReaders = async (req, res) => {
 
 export const fetchTransactionByJwtForCreators = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const token = authHeader.split(" ")[1];
-    const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
-
-    const userId = decoded.userId;
+    const userId = getUserJwtFromToken(req);
 
     const [creator] = await db
       .select()
@@ -320,7 +312,8 @@ export const fetchTransactionByJwtForCreators = async (req, res) => {
     const creatorTransaction = await db
       .select()
       .from(creatorTransactions)
-      .where(eq(creatorTransactions.creatorId, creator.id));
+      .where(eq(creatorTransactions.creatorId, creator.id))
+      .orderBy(desc(creatorTransactions.createdAt));
 
     return res.json({ transaction: creatorTransaction });
   } catch (err) {

@@ -163,6 +163,13 @@ CREATE TABLE "loyalty_points" (
 	"last_updated" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "comic_subscribers" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"reader_id" uuid NOT NULL,
+	"comic_id" uuid NOT NULL,
+	"subscribed_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "comics" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"title" varchar(255) NOT NULL,
@@ -180,6 +187,20 @@ CREATE TABLE "comics" (
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "comics_slug_unique" UNIQUE("slug")
+);
+--> statement-breakpoint
+CREATE TABLE "chapter_likes" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"reader_id" uuid NOT NULL,
+	"chapter_id" uuid NOT NULL,
+	"viewed_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "chapter_views" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"reader_id" uuid NOT NULL,
+	"chapter_id" uuid NOT NULL,
+	"viewed_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "chapters" (
@@ -269,7 +290,13 @@ ALTER TABLE "user_profiles" ADD CONSTRAINT "user_profiles_auth_user_id_auth_user
 ALTER TABLE "user_wallets" ADD CONSTRAINT "user_wallets_user_profile_id_user_profiles_id_fk" FOREIGN KEY ("user_profile_id") REFERENCES "public"."user_profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wallet_addresses" ADD CONSTRAINT "wallet_addresses_user_wallet_id_user_wallets_id_fk" FOREIGN KEY ("user_wallet_id") REFERENCES "public"."user_wallets"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "loyalty_points" ADD CONSTRAINT "loyalty_points_user_id_auth_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."auth_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comic_subscribers" ADD CONSTRAINT "comic_subscribers_reader_id_reader_profile_id_fk" FOREIGN KEY ("reader_id") REFERENCES "public"."reader_profile"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comic_subscribers" ADD CONSTRAINT "comic_subscribers_comic_id_comics_id_fk" FOREIGN KEY ("comic_id") REFERENCES "public"."comics"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comics" ADD CONSTRAINT "comics_creator_id_creator_profile_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."creator_profile"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "chapter_likes" ADD CONSTRAINT "chapter_likes_reader_id_reader_profile_id_fk" FOREIGN KEY ("reader_id") REFERENCES "public"."reader_profile"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "chapter_likes" ADD CONSTRAINT "chapter_likes_chapter_id_chapters_id_fk" FOREIGN KEY ("chapter_id") REFERENCES "public"."chapters"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "chapter_views" ADD CONSTRAINT "chapter_views_reader_id_reader_profile_id_fk" FOREIGN KEY ("reader_id") REFERENCES "public"."reader_profile"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "chapter_views" ADD CONSTRAINT "chapter_views_chapter_id_chapters_id_fk" FOREIGN KEY ("chapter_id") REFERENCES "public"."chapters"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "chapters" ADD CONSTRAINT "chapters_comic_id_comics_id_fk" FOREIGN KEY ("comic_id") REFERENCES "public"."comics"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "paid_Chapters" ADD CONSTRAINT "paid_Chapters_reader_id_reader_profile_id_fk" FOREIGN KEY ("reader_id") REFERENCES "public"."reader_profile"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "paid_Chapters" ADD CONSTRAINT "paid_Chapters_chapter_id_chapters_id_fk" FOREIGN KEY ("chapter_id") REFERENCES "public"."chapters"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

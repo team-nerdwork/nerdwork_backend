@@ -1,12 +1,19 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../config/db";
-import { chapters, chapterTypeEnum, paidChapters } from "../model/chapter";
+import {
+  chapterLikes,
+  chapters,
+  chapterTypeEnum,
+  chapterViews,
+  paidChapters,
+} from "../model/chapter";
 import { comics } from "../model/comic";
 import { creatorProfile, readerProfile } from "../model/profile";
 import { processContentPurchase } from "./transaction.controller";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { mapFilesToUrls } from "./file.controller";
+import { getUserJwtFromToken } from "./library.controller";
 
 // helper function to strip URL
 function extractFilePath(url: string): string {
@@ -19,6 +26,46 @@ function extractFilePath(url: string): string {
     // fallback in case url is not a valid URL
     return url;
   }
+}
+
+export async function getChapterLikes(chapterId, readerId?) {
+  // Count likes
+  const [{ likesCount }] = await db
+    .select({ likesCount: sql`COUNT(${chapterLikes.id})` })
+    .from(chapterLikes)
+    .where(eq(chapterLikes.chapterId, chapterId));
+
+  let hasLiked = false;
+  if (readerId) {
+    const [existingLike] = await db
+      .select()
+      .from(chapterLikes)
+      .where(
+        and(
+          eq(chapterLikes.chapterId, chapterId),
+          eq(chapterLikes.readerId, readerId)
+        )
+      );
+
+    hasLiked = !!existingLike;
+  }
+
+  return {
+    likesCount: Number(likesCount) || 0,
+    hasLiked,
+  };
+}
+
+export async function getChapterViews(chapterId) {
+  // Count likes
+  const [{ viewsCount }] = await db
+    .select({ viewsCount: sql`COUNT(${chapterViews.id})` })
+    .from(chapterViews)
+    .where(eq(chapterViews.chapterId, chapterId));
+
+  return {
+    viewsCount: Number(viewsCount) || 0,
+  };
 }
 
 export const createChapter = async (req, res) => {
@@ -125,13 +172,7 @@ export const fetchChaptersByComicSlugForReaders = async (req, res) => {
   try {
     const { slug } = req.params;
 
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
-    const token = authHeader.split(" ")[1];
-    const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
-    const userId = decoded.userId;
+    const userId = getUserJwtFromToken(req);
 
     const [comic] = await db.select().from(comics).where(eq(comics.slug, slug));
     if (!comic) {
@@ -160,6 +201,17 @@ export const fetchChaptersByComicSlugForReaders = async (req, res) => {
         )
       );
 
+    // If logged in, fetch viewed chapters
+    // let userViews = new Set();
+    // if (readerId) {
+    //   const userViewRows = await db
+    //     .select({ chapterId: chapterViews.chapterId })
+    //     .from(chapterViews)
+    //     .where(eq(chapterViews.readerId, readerId));
+
+    //   userViews = new Set(userViewRows.map((row) => row.chapterId));
+    // }
+
     const paid = await db
       .select({ chapterId: paidChapters.chapterId })
       .from(paidChapters)
@@ -167,23 +219,36 @@ export const fetchChaptersByComicSlugForReaders = async (req, res) => {
 
     const paidChapterIds = new Set(paid.map((p) => p.chapterId));
 
-    const data = allChapters.map((chapter) => ({
-      id: chapter.id,
-      title: chapter.title,
-      chapterType: chapter.chapterType,
-      chapterStatus: chapter.chapterStatus,
-      price: chapter.price,
-      summary: chapter.summary,
-      pages: mapFilesToUrls(chapter.pages),
-      serialNo: chapter.serialNo,
-      uniqueCode: chapter.uniqueCode,
-      createdAt: chapter.createdAt,
-      updatedAt: chapter.updatedAt,
-      creatorName: creator.creatorName,
-      comicSlug: comic.slug,
-      comicTitle: comic.title,
-      hasPaid: paidChapterIds.has(chapter.id),
-    }));
+    const data = await Promise.all(
+      allChapters.map(async (chapter) => {
+        const { likesCount, hasLiked } = await getChapterLikes(
+          chapter.id,
+          reader?.id
+        );
+        const { viewsCount } = await getChapterViews(chapter.id);
+        return {
+          id: chapter.id,
+          title: chapter.title,
+          chapterType: chapter.chapterType,
+          chapterStatus: chapter.chapterStatus,
+          price: chapter.price,
+          summary: chapter.summary,
+          pages: mapFilesToUrls(chapter.pages),
+          serialNo: chapter.serialNo,
+          uniqueCode: chapter.uniqueCode,
+          createdAt: chapter.createdAt,
+          updatedAt: chapter.updatedAt,
+          creatorName: creator.creatorName,
+          comicSlug: comic.slug,
+          comicTitle: comic.title,
+          hasPaid: paidChapterIds.has(chapter.id),
+          // hasViewed: userViews.has(chapter.id),
+          likesCount,
+          viewsCount,
+          hasLiked,
+        };
+      })
+    );
 
     return res.status(200).json({
       success: true,
@@ -211,7 +276,73 @@ export const fetchChaptersByComicSlugForCreators = async (req, res) => {
       .from(chapters)
       .where(eq(chapters.comicId, comic.id));
 
-    const data = allChapters.map((chapter) => ({
+    const data = await Promise.all(
+      allChapters.map(async (chapter) => {
+        const { likesCount } = await getChapterLikes(chapter.id);
+
+        const { viewsCount } = await getChapterViews(chapter.id);
+
+        return {
+          id: chapter.id,
+          title: chapter.title,
+          chapterType: chapter.chapterType,
+          chapterStatus: chapter.chapterStatus,
+          price: chapter.price,
+          summary: chapter.summary,
+          pages: mapFilesToUrls(chapter.pages),
+          serialNo: chapter.serialNo,
+          uniqueCode: chapter.uniqueCode,
+          createdAt: chapter.createdAt,
+          updatedAt: chapter.updatedAt,
+          comicSlug: comic.slug,
+          comicTitle: comic.title,
+          viewsCount,
+          likesCount,
+        };
+      })
+    );
+    return res.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (err) {
+    console.error("Fetch Chapters Error:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const fetchChapterByUniqueCode = async (req, res) => {
+  try {
+    const userId = getUserJwtFromToken(req);
+    const { code } = req.params;
+
+    const [reader] = await db
+      .select()
+      .from(readerProfile)
+      .where(eq(readerProfile.userId, userId));
+
+    const [chapter] = await db
+      .select()
+      .from(chapters)
+      .where(eq(chapters.uniqueCode, code));
+
+    if (!chapter) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Chapter not found" });
+    }
+
+    const [paid] = await db
+      .select({ chapterId: paidChapters.chapterId })
+      .from(paidChapters)
+      .where(eq(paidChapters.readerId, reader.id));
+
+    const hasPaid = !!paid;
+
+    const { likesCount } = await getChapterLikes(chapter.id);
+    const { viewsCount } = await getChapterViews(chapter.id);
+
+    const data = {
       id: chapter.id,
       title: chapter.title,
       chapterType: chapter.chapterType,
@@ -223,21 +354,22 @@ export const fetchChaptersByComicSlugForCreators = async (req, res) => {
       uniqueCode: chapter.uniqueCode,
       createdAt: chapter.createdAt,
       updatedAt: chapter.updatedAt,
-      comicSlug: comic.slug,
-      comicTitle: comic.title,
-    }));
+      likesCount,
+      viewsCount,
+      hasPaid,
+    };
 
     return res.status(200).json({
       success: true,
       data,
     });
   } catch (err: any) {
-    console.error("Fetch Chapters Error:", err);
+    console.error("Fetch Chapter by Code Error:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-export const fetchChapterByUniqueCode = async (req, res) => {
+export const fetchChapterByUniqueCodeForCreators = async (req, res) => {
   try {
     const { code } = req.params;
 
@@ -252,6 +384,9 @@ export const fetchChapterByUniqueCode = async (req, res) => {
         .json({ success: false, message: "Chapter not found" });
     }
 
+    const { likesCount } = await getChapterLikes(chapter.id);
+    const { viewsCount } = await getChapterViews(chapter.id);
+
     const data = {
       id: chapter.id,
       title: chapter.title,
@@ -264,6 +399,8 @@ export const fetchChapterByUniqueCode = async (req, res) => {
       uniqueCode: chapter.uniqueCode,
       createdAt: chapter.createdAt,
       updatedAt: chapter.updatedAt,
+      likesCount,
+      viewsCount,
     };
 
     return res.status(200).json({
@@ -283,7 +420,13 @@ export const publishDraft = async (req, res) => {
     const [chapter] = await db
       .select()
       .from(chapters)
-      .where(eq(chapters.uniqueCode, draftUniqCode));
+      .where(
+        and(
+          eq(chapters.uniqueCode, draftUniqCode),
+          eq(chapters.comicId, comicId),
+          eq(chapters.chapterStatus, "draft")
+        )
+      );
 
     if (!chapter) {
       return res
@@ -303,13 +446,14 @@ export const publishDraft = async (req, res) => {
 
     const nextSerial = (lastChapter?.maxSerial || 0) + 1;
 
-    await db
+    const [updatedChapter] = await db
       .update(chapters)
       .set({
         chapterStatus: "published",
         serialNo: nextSerial,
       })
-      .where(eq(chapters.id, chapter.id));
+      .where(eq(chapters.id, chapter.id))
+      .returning();
 
     await db
       .update(comics)
@@ -323,6 +467,7 @@ export const publishDraft = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Draft published successfully",
+      data: updatedChapter,
     });
   } catch (err: any) {
     console.error("Publish Draft Error:", err);
@@ -610,6 +755,122 @@ export const fetchAllPaidChapters = async (req, res) => {
     });
   } catch (err: any) {
     console.error("Fetch Paid Chapters Error:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const addChapterView = async (req, res) => {
+  try {
+    const { chapterId } = req.body;
+    const userId = getUserJwtFromToken(req);
+
+    const [reader] = await db
+      .select()
+      .from(readerProfile)
+      .where(eq(readerProfile.userId, userId));
+
+    // Check if already viewed
+    const existingView = await db
+      .select()
+      .from(chapterViews)
+      .where(
+        and(
+          eq(chapterViews.readerId, reader.id),
+          eq(chapterViews.chapterId, chapterId)
+        )
+      );
+
+    if (existingView.length > 0) {
+      return res.status(200).json({
+        success: true,
+        message: "Already viewed",
+      });
+    }
+
+    // Insert new view
+    await db.insert(chapterViews).values({
+      readerId: reader.id,
+      chapterId,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "View recorded",
+    });
+  } catch (err) {
+    console.error("Add Chapter View Error:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const toggleChapterLike = async (req, res) => {
+  try {
+    const userId = getUserJwtFromToken(req);
+    const { chapterId } = req.params;
+
+    const [reader] = await db
+      .select()
+      .from(readerProfile)
+      .where(eq(readerProfile.userId, userId));
+    if (!reader) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Reader not found" });
+    }
+
+    // check if already liked
+    const [existingLike] = await db
+      .select()
+      .from(chapterLikes)
+      .where(
+        and(
+          eq(chapterLikes.chapterId, chapterId),
+          eq(chapterLikes.readerId, reader.id)
+        )
+      );
+
+    if (existingLike) {
+      // Unlike (delete row)
+      await db.delete(chapterLikes).where(eq(chapterLikes.id, existingLike.id));
+
+      const [{ likesCount }] = await db
+        .select({ likesCount: sql`COUNT(${chapterLikes.id})` })
+        .from(chapterLikes)
+        .where(eq(chapterLikes.chapterId, chapterId));
+
+      return res.status(200).json({
+        success: true,
+        message: "Chapter unliked",
+        data: {
+          chapterId: chapterId,
+          liked: false,
+          likesCount: Number(likesCount) || 0,
+        },
+      });
+    } else {
+      // Like (insert row)
+      await db.insert(chapterLikes).values({
+        chapterId: chapterId,
+        readerId: reader.id,
+      });
+
+      const [{ likesCount }] = await db
+        .select({ likesCount: sql`COUNT(${chapterLikes.id})` })
+        .from(chapterLikes)
+        .where(eq(chapterLikes.chapterId, chapterId));
+
+      return res.status(200).json({
+        success: true,
+        message: "Chapter liked",
+        data: {
+          chapterId: chapterId,
+          liked: true,
+          likesCount: Number(likesCount) || 0,
+        },
+      });
+    }
+  } catch (err: any) {
+    console.error("Toggle Like Error:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
