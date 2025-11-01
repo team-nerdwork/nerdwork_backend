@@ -371,23 +371,23 @@ export const mintApiNFT = async (req, res) => {
     const createResult = await create(umi, mintParams).sendAndConfirm(umi);
 
     //save nft to database
-    await db.insert(nft).values({
-      owner: userWallet, // UUID from the user wallet
-      colection: collectionId ?? "standalone", // optional or default string
-      isLimitedEdition: false, // or true if it's a limited edition
-      amount: 1, // assume 1 NFT minted
-      metadata: {
-        name,
-        description,
-        author,
-        image: req.file.path,
-        uri: metadataUri,
-        assetId: assetSigner.publicKey,
-        attributes: comicAttributes,
-        mintSignature: createResult.signature,
-      },
-      status: "completed", // or 'pending' if there's more flow
-    });
+    // await db.insert(nft).values({
+    //   owner: userWallet, // UUID from the user wallet
+    //   colection: collectionId ?? "standalone", // optional or default string
+    //   isLimitedEdition: false, // or true if it's a limited edition
+    //   amount: 1, // assume 1 NFT minted
+    //   metadata: {
+    //     name,
+    //     description,
+    //     author,
+    //     image: req.file.path,
+    //     uri: metadataUri,
+    //     assetId: assetSigner.publicKey,
+    //     attributes: comicAttributes,
+    //     mintSignature: createResult.signature,
+    //   },
+    //   status: "completed", // or 'pending' if there's more flow
+    // });
 
     let transferResult = null;
 

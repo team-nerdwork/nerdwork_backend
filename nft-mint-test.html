@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFT Mint Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, textarea, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 20px; padding: 15px; border-radius: 4px; }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>NFT Mint Test Form</h1>
+    
+    <form id="mintForm" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="image">Image File *</label>
+            <input type="file" id="image" name="image" accept="image/*" required>
+        </div>
+
+        <div class="form-group">
+            <label for="userProfileId">User Profile ID *</label>
+            <input type="text" id="userProfileId" name="userProfileId" required 
+                   placeholder="e.g., 123e4567-e89b-12d3-a456-426614174000">
+        </div>
+
+        <div class="form-group">
+            <label for="name">NFT Name *</label>
+            <input type="text" id="name" name="name" required placeholder="e.g., Amazing Comic #1">
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description *</label>
+            <textarea id="description" name="description" required rows="3" 
+                      placeholder="Describe your comic NFT..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="author">Author</label>
+            <input type="text" id="author" name="author" placeholder="Comic author name">
+        </div>
+
+        <div class="form-group">
+            <label for="series">Series</label>
+            <input type="text" id="series" name="series" placeholder="Comic series name">
+        </div>
+
+        <div class="form-group">
+            <label for="issue">Issue Number</label>
+            <input type="number" id="issue" name="issue" placeholder="1">
+        </div>
+
+        <div class="form-group">
+            <label for="genre">Genre</label>
+            <input type="text" id="genre" name="genre" placeholder="e.g., Action, Comedy, Drama">
+        </div>
+
+        <div class="form-group">
+            <label for="pages">Pages</label>
+            <input type="number" id="pages" name="pages" placeholder="20">
+        </div>
+
+        <div class="form-group">
+            <label for="collectionId">Collection ID</label>
+            <input type="text" id="collectionId" name="collectionId" 
+                   placeholder="Optional collection public key">
+        </div>
+
+        <div class="form-group">
+            <label for="attributes">Attributes (JSON)</label>
+            <textarea id="attributes" name="attributes" rows="3" 
+                      placeholder='[{"trait_type": "Rarity", "value": "Common"}]'></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="transferImmediately" name="transferImmediately" checked>
+                Transfer Immediately
+            </label>
+        </div>
+
+        <button type="submit">Mint NFT</button>
+    </form>
+
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('mintForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            const form = e.target;
+            
+            // Add all form fields to FormData
+            for (let element of form.elements) {
+                if (element.name && element.type !== 'submit') {
+                    if (element.type === 'file') {
+                        if (element.files[0]) {
+                            formData.append(element.name, element.files[0]);
+                        }
+                    } else if (element.type === 'checkbox') {
+                        formData.append(element.name, element.checked);
+                    } else if (element.value) {
+                        formData.append(element.name, element.value);
+                    }
+                }
+            }
+
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>Minting NFT...</p>';
+
+            try {
+                const response = await fetch('http://localhost:5000/nft/mint', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <h3>Success!</h3>
+                            <p><strong>Asset ID:</strong> ${result.assetId}</p>
+                            <p><strong>Mint Signature:</strong> ${result.mintSignature}</p>
+                            <p><strong>Metadata URI:</strong> <a href="${result.metadataUri}" target="_blank">${result.metadataUri}</a></p>
+                            <p><strong>Message:</strong> ${result.message}</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h3>Error</h3>
+                            <p><strong>Error:</strong> ${result.error}</p>
+                            <p><strong>Details:</strong> ${result.details || 'No additional details'}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>Network Error</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>
