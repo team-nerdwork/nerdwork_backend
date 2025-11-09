@@ -11,7 +11,7 @@ import { userWallets } from './wallet';
 
 
 
-export const nftTransactions = pgTable('nwt_transactions', {
+export const nftTransactions = pgTable('nft_transactions', {
   id: uuid('id').primaryKey().defaultRandom(),
   userWalletId: uuid('user_wallet_id')
     .notNull()
@@ -33,17 +33,41 @@ export const nftTransactions = pgTable('nwt_transactions', {
 
 
 
-export const nft = pgTable('nwt_transactions', {
+export const nft = pgTable('nfts', {
   id: uuid('id').primaryKey().defaultRandom(),
   owner: uuid('user_wallet_id')
     .notNull()
     .references(() => userWallets.id, { onDelete: 'cascade' }),
-  colection: text('collection'), // 'credit' | 'debit'
-  price: integer('price').default(0), // 'purchase', 'sale', etc.
+  colection: text('collection'), // Collection type: 'anchor', 'metaplex', etc.
+  nftType: text('nft_type').default('anchor'), // 'anchor' or 'metaplex'
+  mintAddress: text('mint_address'), // Solana mint address
+  price: integer('price').default(0),
   isLimitedEdition: boolean('is_limited_edition').default(false),
-  amount: integer("amount"),
+  amount: integer("amount").default(1),
   metadata: json('metadata'),
-  status: text('status').notNull(), // 'pending', 'completed', etc.
+  status: text('status').notNull(), // 'pending', 'minting', 'completed', 'transferred'
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
+});
+
+/**
+ * NFT ownership transfer history table
+ */
+export const nftTransferHistory = pgTable('nft_transfer_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  nftId: uuid('nft_id')
+    .notNull()
+    .references(() => nft.id, { onDelete: 'cascade' }),
+  fromUserWalletId: uuid('from_user_wallet_id')
+    .references(() => userWallets.id, { onDelete: 'set null' }),
+  toUserWalletId: uuid('to_user_wallet_id')
+    .notNull()
+    .references(() => userWallets.id, { onDelete: 'cascade' }),
+  fromWalletAddress: text('from_wallet_address'),
+  toWalletAddress: text('to_wallet_address').notNull(),
+  transactionHash: text('transaction_hash'),
+  status: text('status').notNull(), // 'pending', 'completed', 'failed'
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
 });
 
 

@@ -1,3 +1,4 @@
+import { url } from "inspector";
 import swaggerJSDoc from "swagger-jsdoc";
 
 const options = {
@@ -11,6 +12,9 @@ const options = {
     servers: [
       {
         url: "https://nerdworkbackend-production.up.railway.app/",
+      },
+      {
+        url: "http://localhost:5000/api"
       },
     ],
     components: {
