@@ -24,7 +24,7 @@ export class AnchorProgramService {
 
   constructor(
     connection: Connection,
-    privateKey: string | number[],
+    privateKey: string | number[] | { secretKey: number[] },
     programIdl: typeof IDL
   ) {
     this.connection = connection;
