@@ -45,6 +45,7 @@ export const uploadMiddleware = multer({
  * POST /anchor-nft/mint
  */
 export const mintNftWithImage = async (req: Request, res: Response): Promise<void> => {
+  console.log("hello")
   try {
     if (!req.file) {
       res.status(400).json({ error: "Image file is required" });

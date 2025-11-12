@@ -31,6 +31,7 @@ export const spendCategoryEnum = pgEnum("spend_category", [
   "comic_purchase",
   "tip_creator",
   "subscription",
+  "marketplace_purchase",
 ]);
 
 export const userTransactions = pgTable("user_transactions", {

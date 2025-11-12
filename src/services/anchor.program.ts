@@ -38,7 +38,7 @@ export class AnchorProgramService {
     } else {
       console.log(privateKey)
       this.platformAuthority = Keypair.fromSecretKey(
-        new Uint8Array(privateKey.secretKey)
+        new Uint8Array((privateKey as any).secretKey || privateKey)
       );
     }
 
@@ -233,7 +233,7 @@ export class AnchorProgramService {
         this.PROGRAM_ID
       );
 
-      const nftInfo = await this.program.account.nftInfo.fetch(nftInfoPda);
+      const nftInfo = await (this.program.account as any).nftInfo.fetch(nftInfoPda);
 
       return {
         owner: nftInfo.owner,
@@ -255,7 +255,7 @@ export class AnchorProgramService {
   }> {
     try {
       console.log(this.platformPda)
-      const platformInfo = await this.program.account.platform.fetch(
+      const platformInfo = await (this.program.account as any).platform.fetch(
         this.platformPda
       );
 
@@ -285,7 +285,7 @@ export class AnchorProgramService {
   > {
     try {
       // Query all NftInfo accounts where owner matches the user
-      const nftAccounts = await this.program.account.nftInfo.all([
+      const nftAccounts = await (this.program.account as any).nftInfo.all([
         {
           memcmp: {
             offset: 32, // owner is at offset 32 (after mint: 32 bytes)
@@ -361,7 +361,7 @@ export class AnchorProgramService {
     }>
   > {
     try {
-      const nftAccounts = await this.program.account.nftInfo.all();
+      const nftAccounts = await (this.program.account as any).nftInfo.all();
 
       return nftAccounts.map((account) => ({
         mint: account.account.mint,
