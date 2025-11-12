@@ -9,7 +9,10 @@ import * as anchor from "@coral-xyz/anchor";
 import { IDL } from "../idl/nft_minting";
 import * as fs from "fs";
 import * as path from "path";
-import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 
 export class AnchorProgramService {
   private connection: Connection;
@@ -24,7 +27,7 @@ export class AnchorProgramService {
 
   constructor(
     connection: Connection,
-    privateKey: string | number[] | { secretKey: number[] },
+    privateKey: string | any | { secretKey: string | any },
     programIdl: typeof IDL
   ) {
     this.connection = connection;
@@ -32,11 +35,9 @@ export class AnchorProgramService {
     // Initialize authority keypair from private key
     if (typeof privateKey === "string") {
       const secretKey = JSON.parse(fs.readFileSync(privateKey, "utf-8"));
-      this.platformAuthority = Keypair.fromSecretKey(
-        new Uint8Array(secretKey)
-      );
+      this.platformAuthority = Keypair.fromSecretKey(new Uint8Array(secretKey));
     } else {
-      console.log(privateKey)
+      console.log(privateKey);
       this.platformAuthority = Keypair.fromSecretKey(
         new Uint8Array(privateKey.secretKey)
       );
@@ -50,17 +51,20 @@ export class AnchorProgramService {
     );
 
     // Create program instance
-    anchor.Program.fetchIdl("8P1rQdfyNp68WWEd9PuZhCeGv9vvV3cUbyGj9qBkkk7N", provider).then(
-      (idl) => {
-        // console.log(idl)
-        this.program = new anchor.Program(idl, provider);
-      }
-    )
-  
+    anchor.Program.fetchIdl(
+      "8P1rQdfyNp68WWEd9PuZhCeGv9vvV3cUbyGj9qBkkk7N",
+      provider
+    ).then((idl) => {
+      // console.log(idl)
+      this.program = new anchor.Program(idl, provider);
+    });
+
     this.program = new anchor.Program(programIdl, provider);
 
     // Initialize PDA (will be set after derive)
-    this.platformPda = new PublicKey("2L3owCSXA5ety87GMUL7Hf5LmgDDNGT7cpAdD1it1NHx");
+    this.platformPda = new PublicKey(
+      "2L3owCSXA5ety87GMUL7Hf5LmgDDNGT7cpAdD1it1NHx"
+    );
     this.platformBump = 0;
   }
 
@@ -69,10 +73,7 @@ export class AnchorProgramService {
    */
   async derivePlatformPda(): Promise<{ pda: PublicKey; bump: number }> {
     const [pda, bump] = PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("platform"),
-        this.platformAuthority.publicKey.toBuffer(),
-      ],
+      [Buffer.from("platform"), this.platformAuthority.publicKey.toBuffer()],
       this.PROGRAM_ID
     );
 
@@ -103,7 +104,6 @@ export class AnchorProgramService {
       throw error;
     }
   }
-
 
   /**
    * Mint NFT for a user
@@ -220,9 +220,7 @@ export class AnchorProgramService {
   /**
    * Get NFT info for a specific mint
    */
-  async getNftInfo(
-    mintAddress: PublicKey
-  ): Promise<{
+  async getNftInfo(mintAddress: PublicKey): Promise<{
     owner: PublicKey;
     name: string;
     uri: string;
@@ -254,7 +252,7 @@ export class AnchorProgramService {
     nftCount: number;
   }> {
     try {
-      console.log(this.platformPda)
+      console.log(this.platformPda);
       const platformInfo = await this.program.account.platform.fetch(
         this.platformPda
       );
@@ -272,9 +270,7 @@ export class AnchorProgramService {
   /**
    * Get all NFTs owned by a user
    */
-  async getUserNfts(
-    userAddress: PublicKey
-  ): Promise<
+  async getUserNfts(userAddress: PublicKey): Promise<
     Array<{
       mint: PublicKey;
       owner: PublicKey;
@@ -311,9 +307,7 @@ export class AnchorProgramService {
    * Get all NFTs for a user by checking their token accounts
    * This is a more reliable method using the connection
    */
-  async getUserNftsByTokenAccounts(
-    userAddress: PublicKey
-  ): Promise<
+  async getUserNftsByTokenAccounts(userAddress: PublicKey): Promise<
     Array<{
       mint: PublicKey;
       tokenAccount: PublicKey;
@@ -331,8 +325,7 @@ export class AnchorProgramService {
           const tokenAmount = account.account.data.parsed.info.tokenAmount;
           // NFTs have decimals = 0 and amount = 1
           return (
-            tokenAmount.decimals === 0 &&
-            parseInt(tokenAmount.amount) === 1
+            tokenAmount.decimals === 0 && parseInt(tokenAmount.amount) === 1
           );
         })
         .map((account) => ({
@@ -427,15 +420,20 @@ export function initializeAnchorService(
   programIdl: typeof IDL
 ): AnchorProgramService {
   if (!anchorService) {
-    anchorService = new AnchorProgramService(connection, privateKey, programIdl);
+    anchorService = new AnchorProgramService(
+      connection,
+      privateKey,
+      programIdl
+    );
   }
   return anchorService;
 }
 
 export function getAnchorService(): AnchorProgramService {
-  
   if (!anchorService) {
-    throw new Error("Anchor service not initialized. Call initializeAnchorService first.");
+    throw new Error(
+      "Anchor service not initialized. Call initializeAnchorService first."
+    );
   }
   return anchorService;
 }
