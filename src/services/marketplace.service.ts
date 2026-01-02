@@ -116,6 +116,7 @@ export const listNftForSale = async (
 /**
  * Get active listings with filters
  */
+
 export const getActiveListings = async (
   limit: number = 20,
   offset: number = 0,
@@ -127,55 +128,47 @@ export const getActiveListings = async (
   }
 ) => {
   try {
-    let query = db
+    // Build where conditions
+    const conditions: any[] = [eq(nftListings.status, "active")];
+
+    if (filters?.minPrice) {
+      conditions.push(gte(nftListings.price, filters.minPrice.toString()));
+    }
+    if (filters?.maxPrice) {
+      conditions.push(lte(nftListings.price, filters.maxPrice.toString()));
+    }
+    if (filters?.sellerId) {
+      conditions.push(eq(nftListings.sellerId, filters.sellerId));
+    }
+
+    // Build order by
+    let orderByClause;
+    if (filters?.sortBy === "price_asc") {
+      orderByClause = asc(nftListings.price);
+    } else if (filters?.sortBy === "price_desc") {
+      orderByClause = desc(nftListings.price);
+    } else if (filters?.sortBy === "newest") {
+      orderByClause = desc(nftListings.listedAt);
+    } else {
+      orderByClause = asc(nftListings.listedAt);
+    }
+
+    // Execute query
+    const listings = await db
       .select()
       .from(nftListings)
-      .where(eq(nftListings.status, "active"));
-
-    // Apply price filters
-    if (filters?.minPrice) {
-      query = query.where(gte(nftListings.price, filters.minPrice.toString()));
-    }
-    if (filters?.maxPrice) {
-      query = query.where(lte(nftListings.price, filters.maxPrice.toString()));
-    }
-
-    // Filter by seller
-    if (filters?.sellerId) {
-      query = query.where(eq(nftListings.sellerId, filters.sellerId));
-    }
-
-    // Apply sorting
-    if (filters?.sortBy === "price_asc") {
-      query = query.orderBy(asc(nftListings.price));
-    } else if (filters?.sortBy === "price_desc") {
-      query = query.orderBy(desc(nftListings.price));
-    } else if (filters?.sortBy === "newest") {
-      query = query.orderBy(desc(nftListings.listedAt));
-    } else {
-      query = query.orderBy(asc(nftListings.listedAt));
-    }
-
-    // Apply pagination
-    query = query.limit(limit).offset(offset);
-
-    const listings = await query;
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
 
     // Get total count
-    const countQuery = db
+    const countResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(nftListings)
-      .where(eq(nftListings.status, "active"));
+      .where(and(...conditions));
 
-    if (filters?.minPrice) {
-      countQuery.where(gte(nftListings.price, filters.minPrice.toString()));
-    }
-    if (filters?.maxPrice) {
-      countQuery.where(lte(nftListings.price, filters.maxPrice.toString()));
-    }
-
-    const countResult = await countQuery;
-    const total = countResult[0]?.count || 0;
+    const total = Number(countResult[0]?.count) || 0;
 
     return { listings, total, limit, offset };
   } catch (error) {
@@ -183,6 +176,7 @@ export const getActiveListings = async (
     throw error;
   }
 };
+
 
 /**
  * Get listing details
@@ -266,14 +260,14 @@ export const purchaseNft = async (
     const readerData = await db
       .select()
       .from(readerProfile)
-      .where(eq(readerProfile.userProfileId, buyerId));
+      .where(eq(readerProfile.userId, buyerId));
 
     if (!readerData || readerData.length === 0) {
       throw new Error("Buyer reader profile not found");
     }
 
     // Create order
-    const [order] = await db
+    const orderResult = await db
       .insert(nftOrders)
       .values({
         listingId,
@@ -291,8 +285,13 @@ export const purchaseNft = async (
       })
       .returning();
 
+    const order = Array.isArray(orderResult) ? orderResult[0] : (orderResult as any)[0];
+    if (!order) {
+      throw new Error("Failed to create order");
+    }
+
     // Create transaction record
-    const [transaction] = await db
+    const transactionResult = await db
       .insert(nftOrderTransactions)
       .values({
         orderId: order.id,
@@ -306,6 +305,8 @@ export const purchaseNft = async (
         description: `NFT Purchase: ${listing.title}`,
       })
       .returning();
+
+    const transaction = Array.isArray(transactionResult) ? transactionResult[0] : (transactionResult as any)[0];
 
     return {
       order,
@@ -645,7 +646,7 @@ export const getMarketplaceStats = async () => {
       totalCompletedSales:
         totalSalesResult[0]?.count || 0,
       totalVolume: volumeResult[0]?.total
-        ? parseFloat(volumeResult[0].total)
+        ? parseFloat(volumeResult[0].total.toString())
         : 0,
       floorPrice: floorPriceResult.length > 0
         ? parseFloat(floorPriceResult[0].price as any)

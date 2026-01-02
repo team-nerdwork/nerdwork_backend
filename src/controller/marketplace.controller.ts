@@ -180,12 +180,15 @@ export const buyNft = async (req: Request, res: Response): Promise<void> => {
     );
 
     const { transaction, amounts } = purchaseResult;
+    const defaultTransactionId = Array.isArray(transaction)
+      ? transaction[0]?.id
+      : (transaction as any)?.id;
 
     // Create spend transaction for NWT deduction
     const spendResult = await createUserSpendTransaction(
       buyerId,
-      amounts.purchasePrice,
-      "marketplace_purchase",
+      parseFloat(amounts.purchasePrice.toString()),
+      "comic_purchase",
       listingId,
       purchaseResult.order.sellerId,
       `NFT Purchase`
@@ -215,16 +218,17 @@ export const buyNft = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Complete the purchase
-    await completePurchase(
-      purchaseResult.order.id,
-      spendResult.transaction?.id || transaction.id
-    );
+    const transactionId = Array.isArray(spendResult.transaction)
+      ? spendResult.transaction[0]?.id
+      : spendResult.transaction?.id || defaultTransactionId;
+
+    await completePurchase(purchaseResult.order.id, transactionId);
 
     res.status(201).json({
       success: true,
       data: {
         orderId: purchaseResult.order.id,
-        transactionId: spendResult.transaction?.id || transaction.id,
+        transactionId,
         amounts,
         status: "completed",
       },

@@ -14,6 +14,7 @@ export interface TransferNftRequest {
 }
 
 export interface TransferNftResponse {
+  
   success: boolean;
   signature: string;
   mintAddress: string;
@@ -247,7 +248,7 @@ export class AnchorTransferService {
       if (metadata.signature) {
         history.push({
           type: "minted",
-          timestamp: nftRecord.metadata.publishDate || new Date().toISOString(),
+          timestamp: metadata.publishDate || new Date().toISOString(),
           signature: metadata.signature,
         });
       }

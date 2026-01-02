@@ -7,13 +7,15 @@ import {
   chapterViews,
   paidChapters,
 } from "../model/chapter";
-import { comics } from "../model/comic";
+import { comics, comicSubscribers } from "../model/comic";
 import { creatorProfile, readerProfile } from "../model/profile";
 import { processContentPurchase } from "./transaction.controller";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
-import { mapFilesToUrls } from "./file.controller";
+import { generateFileUrl, mapFilesToUrls } from "./file.controller";
 import { getUserJwtFromToken } from "./library.controller";
+import { sendMail } from "../services/mail.service";
+import { authUsers } from "../model/auth";
 
 // helper function to strip URL
 function extractFilePath(url: string): string {
@@ -75,11 +77,11 @@ export const createChapter = async (req, res) => {
     const finalPrice = chapterType === "free" ? 0 : price;
     const uniqueCode = Math.floor(1000 + Math.random() * 9000).toString();
 
-    // clean up the pages array
     const cleanedPages = Array.isArray(pages)
       ? pages.map((p) => extractFilePath(p))
       : [];
 
+    // Get the last published chapter for serial numbering
     const [lastChapter] = await db
       .select({ maxSerial: sql<number>`MAX(${chapters.serialNo})` })
       .from(chapters)
@@ -92,6 +94,7 @@ export const createChapter = async (req, res) => {
 
     const nextSerial = (lastChapter?.maxSerial || 0) + 1;
 
+    // Create the new chapter
     const [newChapter] = await db
       .insert(chapters)
       .values({
@@ -107,6 +110,7 @@ export const createChapter = async (req, res) => {
       })
       .returning();
 
+    // Update comic’s chapter count and status
     await db
       .update(comics)
       .set({
@@ -115,9 +119,46 @@ export const createChapter = async (req, res) => {
       })
       .where(eq(comics.id, comicId));
 
+    const [comic] = await db
+      .select()
+      .from(comics)
+      .where(eq(comics.id, comicId));
+
+    // Get subscribers (join readerProfile and authUsers to reach email)
+    const subscribers = await db
+      .select({
+        email: authUsers.email,
+        username: authUsers.username,
+        fullName: readerProfile.fullName,
+      })
+      .from(comicSubscribers)
+      .innerJoin(readerProfile, eq(comicSubscribers.readerId, readerProfile.id))
+      .innerJoin(authUsers, eq(readerProfile.userId, authUsers.id))
+      .where(eq(comicSubscribers.comicId, comicId));
+
+    if (subscribers.length > 0) {
+      for (const sub of subscribers) {
+        const html = emailContent
+          .replace(/{{comicCoverUrl}}/g, generateFileUrl(comic.image))
+          .replace(/{{chapterTitle}}/g, newChapter.title)
+          .replace(/{{comicTitle}}/g, comic.title)
+          .replace(/{{userName}}/g, sub.fullName || sub.username);
+
+        try {
+          await sendMail(
+            sub.email,
+            `New Chapter: ${newChapter.title} — ${comic.title}`,
+            html
+          );
+        } catch (mailErr) {
+          console.error(`Failed to send email to ${sub.email}:`, mailErr);
+        }
+      }
+    }
+
     return res.status(201).json({
       success: true,
-      message: "Chapter created successfully",
+      message: "Chapter created successfully and notifications sent",
       data: newChapter,
     });
   } catch (err: any) {
@@ -874,3 +915,119 @@ export const toggleChapterLike = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+const emailContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>New Chapter Alert</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0f0f0f;
+      font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+      color: #fff;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #1a1a1a;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .header {
+      background: linear-gradient(90deg, #ff007a, #7d00ff);
+      padding: 20px;
+      text-align: center;
+      color: #fff;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 26px;
+      letter-spacing: 1px;
+    }
+    .body {
+      padding: 30px 20px;
+    }
+    .comic-cover {
+      width: 100%;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .title {
+      font-size: 22px;
+      font-weight: bold;
+      color: #ff66cc;
+      margin-bottom: 10px;
+    }
+    .chapter {
+      font-size: 18px;
+      margin-bottom: 15px;
+      color: #d4d4d4;
+    }
+    .text {
+      font-size: 15px;
+      line-height: 1.6;
+      color: #bdbdbd;
+      margin-bottom: 25px;
+    }
+    .btn {
+      display: inline-block;
+      background: linear-gradient(90deg, #ff007a, #7d00ff);
+      color: #fff !important;
+      text-decoration: none;
+      padding: 12px 25px;
+      border-radius: 6px;
+      font-weight: bold;
+      letter-spacing: 0.3px;
+      transition: 0.2s;
+    }
+    .btn:hover {
+      opacity: 0.9;
+    }
+    .footer {
+      background-color: #111;
+      text-align: center;
+      padding: 20px;
+      font-size: 13px;
+      color: #777;
+    }
+    .footer a {
+      color: #ff66cc;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>Nerdwork+</h1>
+    </div>
+
+    <div class="body">
+      <img src="{{comicCoverUrl}}" alt="Comic Cover" class="comic-cover" />
+
+      <div class="title">{{comicTitle}}</div>
+      <div class="chapter">New Chapter: <strong>{{chapterTitle}}</strong></div>
+
+      <div class="text">
+        Hey {{userName}}, <br/><br/>
+        Exciting news! A brand new chapter of <strong>{{comicTitle}}</strong> is now available.  
+        Dive back into the story and see what happens next — your adventure continues!
+      </div>
+
+    </div>
+
+    <div class="footer">
+      You're receiving this because you subscribed to <strong>{{comicTitle}}</strong> on Nerdwork+.  
+      <br/>
+      <a href="">Unsubscribe</a> |
+      <a href="https://nerdwork.ng">Visit Nerdwork+</a>
+    </div>
+  </div>
+</body>
+</html>
+`;
