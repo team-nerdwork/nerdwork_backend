@@ -48,8 +48,8 @@ function registerRoutes() {
   app.use("/file-upload", fileRoutes);
   app.use("/library", libraryRoutes);
   app.use("/transactions", transactionRoutes);
-  app.use("/api/anchor-nft", nftRouterV2);
-  app.use("/api/marketplace", marketplaceRoutes);
+  app.use("/anchor-nft", nftRouterV2);
+  app.use("/marketplace", marketplaceRoutes);
 }
 
 /**
@@ -77,7 +77,9 @@ async function startServer() {
     // Start listening
     app.listen(PORT, () => {
       console.log(`\n🚀 Server running at http://localhost:${PORT}`);
-      console.log(`📚 Swagger docs available at http://localhost:${PORT}/api-docs`);
+      console.log(
+        `📚 Swagger docs available at http://localhost:${PORT}/api-docs`
+      );
       console.log(`\nAvailable endpoints:`);
       console.log(`  • NFT Minting: /api/anchor-nft`);
       console.log(`  • Marketplace: /api/marketplace`);
