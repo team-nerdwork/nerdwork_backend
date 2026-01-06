@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "0000_reflective_penance",
+      "when": 1767624836527,
+      "tag": "0000_reflective_penance",
+      "breakpoints": true
+    }
+  ]
+}

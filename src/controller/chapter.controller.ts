@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../config/db";
 import {
+  chapterComments,
   chapterLikes,
   chapters,
   chapterTypeEnum,
@@ -913,6 +914,102 @@ export const toggleChapterLike = async (req, res) => {
   } catch (err: any) {
     console.error("Toggle Like Error:", err);
     return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const addChapterComment = async (req, res) => {
+  try {
+    const { chapterId, content, parentCommentId } = req.body;
+    const userId = getUserJwtFromToken(req);
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Comment content is required",
+      });
+    }
+
+    // Get reader profile
+    const [reader] = await db
+      .select()
+      .from(readerProfile)
+      .where(eq(readerProfile.userId, userId));
+
+    if (!reader) {
+      return res.status(404).json({
+        success: false,
+        message: "Reader profile not found",
+      });
+    }
+
+    // Optional: validate chapter exists
+    const [chapter] = await db
+      .select()
+      .from(chapters)
+      .where(eq(chapters.id, chapterId));
+
+    if (!chapter) {
+      return res.status(404).json({
+        success: false,
+        message: "Chapter not found",
+      });
+    }
+
+    // Insert comment
+    const [comment] = await db
+      .insert(chapterComments)
+      .values({
+        readerId: reader.id,
+        chapterId,
+        content,
+      })
+      .returning();
+
+    return res.status(201).json({
+      success: true,
+      message: "Comment added",
+      data: comment,
+    });
+  } catch (err) {
+    console.error("Add Chapter Comment Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+export const getChapterComments = async (req, res) => {
+  try {
+    const { chapterId } = req.params;
+
+    const comments = await db
+      .select({
+        commentId: chapterComments.id,
+        content: chapterComments.content,
+        createdAt: chapterComments.createdAt,
+        updatedAt: chapterComments.updatedAt,
+        readerId: readerProfile.id,
+        readerName: readerProfile.fullName,
+
+        username: authUsers.username,
+      })
+      .from(chapterComments)
+      .innerJoin(readerProfile, eq(chapterComments.readerId, readerProfile.id))
+      .innerJoin(authUsers, eq(readerProfile.userId, authUsers.id))
+      .where(eq(chapterComments.chapterId, chapterId))
+      .orderBy(chapterComments.createdAt);
+
+    return res.status(200).json({
+      success: true,
+      data: comments,
+    });
+  } catch (err) {
+    console.error("Get Chapter Comments Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 
