@@ -45,6 +45,7 @@ router.get("/stats", getStats);
  * /marketplace/list:
  *   post:
  *     summary: List NFT for sale
+ *     description: Creates a new marketplace listing for an NFT. Validates wallet address format and price limits.
  *     tags: [Marketplace]
  *     requestBody:
  *       required: true
@@ -61,29 +62,39 @@ router.get("/stats", getStats);
  *             properties:
  *               nftId:
  *                 type: string
+ *                 format: uuid
  *                 description: NFT ID from database
  *               sellerId:
  *                 type: string
- *                 description: User wallet ID
+ *                 format: uuid
+ *                 description: Seller's wallet ID (from userWallets table)
  *               sellerWalletAddress:
  *                 type: string
- *                 description: Solana wallet address
+ *                 description: Valid Solana wallet address (base58 format, 44 characters)
+ *                 example: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
  *               price:
  *                 type: number
- *                 description: Price in NWT tokens
+ *                 minimum: 1
+ *                 description: Price in NWT tokens (must be positive)
+ *                 example: 100
  *               title:
  *                 type: string
  *                 description: Listing title
+ *                 example: "Rare Comic NFT #1"
  *               description:
  *                 type: string
+ *                 description: Optional listing description
  *               royaltyPercentage:
  *                 type: number
- *                 description: Creator royalty percentage
+ *                 minimum: 0
+ *                 maximum: 100
+ *                 description: Creator royalty percentage (optional)
+ *                 example: 5
  *     responses:
  *       201:
  *         description: NFT listed successfully
  *       400:
- *         description: Invalid input
+ *         description: Invalid input (missing fields, invalid price, invalid wallet address)
  */
 router.post("/list", listNft);
 

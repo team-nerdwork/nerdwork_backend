@@ -4,7 +4,6 @@ import {
   getActiveListings,
   getListingDetails,
   purchaseNft,
-  completePurchase,
   cancelListing,
   getSellerEscrowBalance,
   getSellerSalesHistory,
@@ -14,10 +13,6 @@ import {
   getMarketplaceStats,
   getMarketplaceConfig,
 } from "../services/marketplace.service";
-import {
-  createUserSpendTransaction,
-  updateUserWalletBalance,
-} from "./transaction.controller";
 import { PublicKey } from "@solana/web3.js";
 
 /**
@@ -166,68 +161,20 @@ export const buyNft = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Create purchase order
-    const purchaseResult = await purchaseNft(
+    // Execute entire purchase flow in atomic transaction
+    const result = await purchaseNft(
       listingId,
       buyerId,
       buyerWalletAddress,
       sellerWalletAddress
     );
 
-    const { transaction, amounts } = purchaseResult;
-    const defaultTransactionId = Array.isArray(transaction)
-      ? transaction[0]?.id
-      : (transaction as any)?.id;
-
-    // Create spend transaction for NWT deduction
-    const spendResult = await createUserSpendTransaction(
-      buyerId,
-      parseFloat(amounts.purchasePrice.toString()),
-      "comic_purchase",
-      listingId,
-      purchaseResult.order.sellerId,
-      `NFT Purchase`
-    );
-
-    if (!spendResult.success) {
-      res.status(500).json({
-        error: "Failed to create payment transaction",
-        details: spendResult.error,
-      });
-      return;
-    }
-
-    // Deduct NWT from buyer's wallet
-    const balanceResult = await updateUserWalletBalance(
-      buyerId,
-      amounts.purchasePrice,
-      "subtract"
-    );
-
-    if (!balanceResult.success) {
-      res.status(500).json({
-        error: "Failed to deduct NWT from wallet",
-        details: balanceResult.error,
-      });
-      return;
-    }
-
-    // Complete the purchase
-    const transactionId = Array.isArray(spendResult.transaction)
-      ? spendResult.transaction[0]?.id
-      : spendResult.transaction?.id || defaultTransactionId;
-
-    await completePurchase(
-      purchaseResult.order.id,
-      transactionId
-    );
-
     res.status(201).json({
       success: true,
       data: {
-        orderId: purchaseResult.order.id,
-        transactionId,
-        amounts,
+        orderId: result.orderId,
+        transactionId: result.transactionId,
+        amounts: result.amounts,
         status: "completed",
       },
       message: "NFT purchased successfully",
