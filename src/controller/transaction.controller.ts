@@ -100,7 +100,8 @@ export const createUserSpendTransaction = async (
     | "comic_purchase"
     | "nft_purchase"
     | "tip_creator"
-    | "subscription",
+    | "subscription"
+    | "marketplace_purchase",
   contentId: string,
   creatorId: string,
   description?: string

@@ -77,7 +77,9 @@ async function startServer() {
     // Start listening
     app.listen(PORT, () => {
       console.log(`\n🚀 Server running at http://localhost:${PORT}`);
-      console.log(`📚 Swagger docs available at http://localhost:${PORT}/api-docs`);
+      console.log(
+        `📚 Swagger docs available at http://localhost:${PORT}/api-docs`
+      );
       console.log(`\nAvailable endpoints:`);
       console.log(`  • NFT Minting: /api/anchor-nft`);
       console.log(`  • Marketplace: /api/marketplace`);

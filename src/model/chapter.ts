@@ -72,3 +72,20 @@ export const chapterLikes = pgTable("chapter_likes", {
 
   viewedAt: timestamp("viewed_at").defaultNow().notNull(),
 });
+
+export const chapterComments = pgTable("chapter_comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+
+  readerId: uuid("reader_id")
+    .notNull()
+    .references(() => readerProfile.id, { onDelete: "cascade" }),
+
+  chapterId: uuid("chapter_id")
+    .notNull()
+    .references(() => chapters.id, { onDelete: "cascade" }),
+
+  content: text("content").notNull(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

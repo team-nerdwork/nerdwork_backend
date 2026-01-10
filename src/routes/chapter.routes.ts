@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  addChapterComment,
   addChapterView,
   buyChapter,
   createChapter,
@@ -11,6 +12,7 @@ import {
   fetchChapterPagesById,
   fetchChaptersByComicSlugForCreators,
   fetchChaptersByComicSlugForReaders,
+  getChapterComments,
   publishDraft,
   toggleChapterLike,
 } from "../controller/chapter.controller";
@@ -444,5 +446,105 @@ router.post("/view", addChapterView);
  *         description: Internal server error
  */
 router.post("/:chapterId/like", toggleChapterLike);
+
+/**
+ * @swagger
+ * /chapters/comments:
+ *   post:
+ *     summary: Add a comment to a chapter
+ *     description: Allows an authenticated reader to add a comment (or reply) to a chapter.
+ *     tags: [Chapters]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - chapterId
+ *               - content
+ *             properties:
+ *               chapterId:
+ *                 type: string
+ *                 example: "chap_abc123"
+ *               content:
+ *                 type: string
+ *                 example: "This chapter was insane 🔥"
+ *     responses:
+ *       201:
+ *         description: Comment added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                   example: "Comment added"
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Invalid input
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Chapter or reader not found
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/comments", addChapterComment);
+
+/**
+ * @swagger
+ * /chapters/{chapterId}/comments:
+ *   get:
+ *     summary: Get comments for a chapter
+ *     description: Fetches all comments (and replies) for a specific chapter.
+ *     tags: [Chapters]
+ *     parameters:
+ *       - in: path
+ *         name: chapterId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: "chap_abc123"
+ *     responses:
+ *       200:
+ *         description: List of chapter comments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       commentId:
+ *                         type: string
+ *                       content:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                       parentCommentId:
+ *                         type: string
+ *                         nullable: true
+ *                       readerName:
+ *                         type: string
+ *                       username:
+ *                         type: string
+ *       404:
+ *         description: Chapter not found
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:chapterId/comments", getChapterComments);
 
 export default router;

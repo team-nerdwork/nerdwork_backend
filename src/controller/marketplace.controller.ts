@@ -34,7 +34,8 @@ export const listNft = async (req: Request, res: Response): Promise<void> => {
     // Validate required fields
     if (!nftId || !sellerId || !sellerWalletAddress || !price || !title) {
       res.status(400).json({
-        error: "Missing required fields: nftId, sellerId, sellerWalletAddress, price, title",
+        error:
+          "Missing required fields: nftId, sellerId, sellerWalletAddress, price, title",
       });
       return;
     }
@@ -80,7 +81,10 @@ export const listNft = async (req: Request, res: Response): Promise<void> => {
  * Get active listings with filtering
  * GET /api/marketplace/listings
  */
-export const getListings = async (req: Request, res: Response): Promise<void> => {
+export const getListings = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const {
       limit = 20,
@@ -156,7 +160,8 @@ export const buyNft = async (req: Request, res: Response): Promise<void> => {
     // Validate required fields
     if (!listingId || !buyerId || !buyerWalletAddress || !sellerWalletAddress) {
       res.status(400).json({
-        error: "Missing required fields: listingId, buyerId, buyerWalletAddress, sellerWalletAddress",
+        error:
+          "Missing required fields: listingId, buyerId, buyerWalletAddress, sellerWalletAddress",
       });
       return;
     }
