@@ -7,6 +7,8 @@ import {
   fetchComicBySlugForReaders,
   deleteComicBySlug,
   subscribeForcomic,
+  fetchAllPublicComics,
+  fetchSharedComicBySlug,
 } from "../controller/comic.controller";
 
 const router = Router();
@@ -18,6 +20,8 @@ router.get("/:slug", fetchComicBySlug);
 router.get("/reader/:slug", fetchComicBySlugForReaders);
 router.delete("/delete/:slug", deleteComicBySlug);
 router.post("/subscribe/:comicId", subscribeForcomic);
+router.post("/", fetchAllPublicComics);
+router.get("/comics/shared/:slug", fetchSharedComicBySlug);
 
 /**
  * @swagger
@@ -267,6 +271,107 @@ router.post("/subscribe/:comicId", subscribeForcomic);
  *         description: Unauthorized - Invalid or missing token
  *       404:
  *         description: Comic or Reader not found
+ *       500:
+ *         description: Internal server error
+ */
+
+/**
+ * @swagger
+ * /comics:
+ *   get:
+ *     summary: Get all published comics (public)
+ *     description: Fetches all published comics with minimal details for public and mobile consumption.
+ *     tags: [Comics]
+ *     responses:
+ *       200:
+ *         description: List of comics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       image:
+ *                         type: string
+ *                       genre:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                       owner:
+ *                         type: string
+ *                       noOfChapters:
+ *                         type: number
+ *                       noOfViews:
+ *                         type: number
+ *                       noOfLikes:
+ *                         type: number
+ *       500:
+ *         description: Internal server error
+ */
+
+/**
+ * @swagger
+ * /comics/shared/{slug}:
+ *   get:
+ *     summary: Get a published comic by slug (public)
+ *     description: Fetches a single published comic using its slug for sharing and public access.
+ *     tags: [Comics]
+ *     parameters:
+ *       - in: path
+ *         name: slug
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: "my-awesome-comic"
+ *     responses:
+ *       200:
+ *         description: Comic fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     title:
+ *                       type: string
+ *                     description:
+ *                       type: string
+ *                     image:
+ *                       type: string
+ *                     genre:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     owner:
+ *                       type: string
+ *                     noOfChapters:
+ *                       type: number
+ *                     noOfViews:
+ *                       type: number
+ *                     noOfLikes:
+ *                       type: number
+ *                     slug:
+ *                       type: string
+ *       404:
+ *         description: Comic not found
  *       500:
  *         description: Internal server error
  */

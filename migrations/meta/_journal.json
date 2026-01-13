@@ -8,6 +8,13 @@
       "when": 1767624836527,
       "tag": "0000_reflective_penance",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1768312230756,
+      "tag": "0001_living_boom_boom",
+      "breakpoints": true
     }
   ]
 }

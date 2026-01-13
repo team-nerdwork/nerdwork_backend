@@ -93,25 +93,21 @@ export const readerProfile = pgTable("reader_profile", {
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-// const samplePreferences = {
-//   theme: 'dark', // or 'light' or 'auto'
-//   reading_direction: 'ltr', // or 'rtl'
-//   page_transition: 'slide', // 'fade' or 'none'
-//   auto_bookmark: true,
-//   notifications: {
-//     email_notifications: true,
-//     push_notifications: false,
-//     new_comics: true,
-//     creator_updates: false,
-//     payment_alerts: true,
-//     marketing: false,
-//   },
-//   privacy: {
-//     profile_visibility: 'friends', // 'public' or 'private'
-//     reading_history_visible: true,
-//     allow_friend_requests: false,
-//   },
-// };
+export const creatorBankDetails = pgTable("creator_bank_details", {
+  id: uuid("id").primaryKey().defaultRandom(),
+
+  creatorId: uuid("creator_id")
+    .notNull()
+    .unique()
+    .references(() => creatorProfile.id, { onDelete: "cascade" }),
+
+  bankName: text("bank_name").notNull(),
+  accountNumber: text("account_number").notNull(),
+  accountName: text("account_name").notNull(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
 export type InsertUserProfile = typeof userProfiles.$inferInsert;
 export type SelectUserProfile = typeof userProfiles.$inferSelect;

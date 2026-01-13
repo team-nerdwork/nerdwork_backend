@@ -1,9 +1,14 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "../config/db";
-import { creatorProfile, readerProfile } from "../model/profile";
+import {
+  creatorBankDetails,
+  creatorProfile,
+  readerProfile,
+} from "../model/profile";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { getUserJwtFromToken } from "./library.controller";
 
 export const addCreatorProfile = async (req, res) => {
   try {
@@ -200,5 +205,101 @@ export const updateCreatorProfile = async (req, res) => {
   } catch (err) {
     console.error("Update Profile  Error:", err);
     return res.status(401).json({ message: "Invalid or expired token" });
+  }
+};
+
+export const upsertCreatorBankDetails = async (req, res) => {
+  try {
+    const userId = getUserJwtFromToken(req);
+    const { bankName, accountNumber, accountName } = req.body;
+
+    if (!bankName || !accountNumber || !accountName) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
+    }
+
+    const [creator] = await db
+      .select()
+      .from(creatorProfile)
+      .where(eq(creatorProfile.userId, userId));
+
+    if (!creator) {
+      return res.status(404).json({
+        success: false,
+        message: "Creator not found",
+      });
+    }
+
+    await db
+      .insert(creatorBankDetails)
+      .values({
+        creatorId: creator.id,
+        bankName,
+        accountNumber,
+        accountName,
+      })
+      .onConflictDoUpdate({
+        target: creatorBankDetails.creatorId,
+        set: {
+          bankName,
+          accountNumber,
+          accountName,
+          updatedAt: new Date(),
+        },
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: "Bank details saved successfully",
+    });
+  } catch (err) {
+    console.error("Upsert Bank Details Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to save bank details",
+    });
+  }
+};
+
+export const getCreatorBankDetails = async (req, res) => {
+  try {
+    const userId = getUserJwtFromToken(req);
+
+    const [creator] = await db
+      .select()
+      .from(creatorProfile)
+      .where(eq(creatorProfile.userId, userId));
+
+    if (!creator) {
+      return res.status(404).json({
+        success: false,
+        message: "Creator not found",
+      });
+    }
+
+    const [bankDetails] = await db
+      .select()
+      .from(creatorBankDetails)
+      .where(eq(creatorBankDetails.creatorId, creator.id));
+
+    if (!bankDetails) {
+      return res.status(200).json({
+        success: true,
+        data: null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: bankDetails,
+    });
+  } catch (err) {
+    console.error("Get Bank Details Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch bank details",
+    });
   }
 };

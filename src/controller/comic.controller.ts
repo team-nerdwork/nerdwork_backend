@@ -403,20 +403,107 @@ export const subscribeForcomic = async (req, res) => {
   }
 };
 
-// ✅ Search comics by title
-// export const searchComics = async (req, res) => {
-//   try {
-//     const { q } = req.query;
-//     if (!q) return res.status(400).json({ message: "Search query required" });
+export const fetchAllPublicComics = async (req, res) => {
+  try {
+    const allComics = await db
+      .select({
+        id: comics.id,
+        title: comics.title,
+        description: comics.description,
+        image: comics.image,
+        slug: comics.slug,
+        genre: comics.genre,
+        noOfChapters: comics.noOfChapters,
+        creatorName: creatorProfile.creatorName,
+      })
+      .from(comics)
+      .innerJoin(creatorProfile, eq(comics.creatorId, creatorProfile.id))
+      .where(eq(comics.comicStatus, "published"));
 
-//     const results = await db
-//       .select()
-//       .from(comics)
-//       .where(ilike(comics.title, `%${q}%`));
+    const data = await Promise.all(
+      allComics.map(async (comic) => {
+        const viewsCount = await getComicViews(comic.id);
+        const likesCount = await getComicLikes(comic.id);
 
-//     return res.json({ results });
-//   } catch (err) {
-//     console.error(err);
-//     return res.status(400).json({ message: "Failed to search comics" });
-//   }
-// };
+        return {
+          id: comic.id,
+          title: comic.title,
+          description: comic.description,
+          image: generateFileUrl(comic.image),
+          genre: comic.genre,
+          owner: comic.creatorName,
+          noOfChapters: comic.noOfChapters,
+          noOfViews: viewsCount,
+          noOfLikes: likesCount,
+          slug: comic.slug,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (err) {
+    console.error("Fetch Public Comics Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch comics",
+    });
+  }
+};
+
+export const fetchSharedComicBySlug = async (req, res) => {
+  const { slug } = req.params;
+
+  try {
+    const [comic] = await db
+      .select({
+        id: comics.id,
+        title: comics.title,
+        description: comics.description,
+        image: comics.image,
+        slug: comics.slug,
+        genre: comics.genre,
+        noOfChapters: comics.noOfChapters,
+        creatorName: creatorProfile.creatorName,
+      })
+      .from(comics)
+      .innerJoin(creatorProfile, eq(comics.creatorId, creatorProfile.id))
+      .where(and(eq(comics.slug, slug), eq(comics.comicStatus, "published")));
+
+    if (!comic) {
+      return res.status(404).json({
+        success: false,
+        message: "Comic not found",
+      });
+    }
+
+    const [noOfViews, noOfLikes] = await Promise.all([
+      getComicViews(comic.id),
+      getComicLikes(comic.id),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: comic.id,
+        title: comic.title,
+        description: comic.description,
+        image: generateFileUrl(comic.image),
+        genre: comic.genre,
+        owner: comic.creatorName,
+        noOfChapters: comic.noOfChapters,
+        noOfViews,
+        noOfLikes,
+        slug: comic.slug,
+      },
+    });
+  } catch (err) {
+    console.error("Fetch Shared Comic Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch comic",
+    });
+  }
+};

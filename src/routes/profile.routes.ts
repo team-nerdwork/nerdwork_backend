@@ -2,10 +2,12 @@ import express from "express";
 import {
   addCreatorProfile,
   addReaderProfile,
+  getCreatorBankDetails,
   getCreatorProfile,
   getReaderProfile,
   updateCreatorProfile,
   updateReaderProfilePin,
+  upsertCreatorBankDetails,
 } from "../controller/profile.controller";
 
 const router = express.Router();
@@ -56,6 +58,9 @@ router.put("/reader/pin", updateReaderProfilePin);
  */
 
 router.put("/creator", updateCreatorProfile);
+
+router.post("/creator/bank-details", upsertCreatorBankDetails);
+router.get("/creator/bank-details", getCreatorBankDetails);
 
 /**
  * @swagger
@@ -365,6 +370,52 @@ router.put("/creator", updateCreatorProfile);
  *                 message:
  *                   type: string
  *                   example: "Profile not found"
+ */
+
+/**
+ * @swagger
+ * /profile/creator/bank-details:
+ *   post:
+ *     summary: Add or update creator bank details
+ *     tags: [Creator Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - bankName
+ *               - accountNumber
+ *               - accountName
+ *             properties:
+ *               bankName:
+ *                 type: string
+ *                 example: "GTBank"
+ *               accountNumber:
+ *                 type: string
+ *                 example: "0123456789"
+ *               accountName:
+ *                 type: string
+ *                 example: "John Doe"
+ *     responses:
+ *       200:
+ *         description: Bank details saved successfully
+ */
+
+/**
+ * @swagger
+ * /profile/creator/bank-details:
+ *   get:
+ *     summary: Get creator bank details
+ *     tags: [Creator Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Creator bank details
  */
 
 /**

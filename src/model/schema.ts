@@ -11,3 +11,4 @@ export * from "./creatorTransaction";
 export * from "./userTransaction";
 export * from "./nft";
 export * from "./marketplace";
+export * from "./notification";

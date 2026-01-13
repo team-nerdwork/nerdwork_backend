@@ -8,5 +8,7 @@ dist/
 .env.local
 
 *.pem
+
+nerdword-app-firebase-adminsdk-fbsvc-772637110d.json
  
 wallet.json

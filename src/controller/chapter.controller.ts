@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../config/db";
 import {
   chapterComments,
@@ -17,6 +17,8 @@ import { generateFileUrl, mapFilesToUrls } from "./file.controller";
 import { getUserJwtFromToken } from "./library.controller";
 import { sendMail } from "../services/mail.service";
 import { authUsers } from "../model/auth";
+import { deviceTokens, notifications } from "../model/notification";
+import { sendPushNotification } from "../services/push.service";
 
 // helper function to strip URL
 function extractFilePath(url: string): string {
@@ -137,25 +139,30 @@ export const createChapter = async (req, res) => {
       .innerJoin(authUsers, eq(readerProfile.userId, authUsers.id))
       .where(eq(comicSubscribers.comicId, comicId));
 
-    if (subscribers.length > 0) {
-      for (const sub of subscribers) {
-        const html = emailContent
-          .replace(/{{comicCoverUrl}}/g, generateFileUrl(comic.image))
-          .replace(/{{chapterTitle}}/g, newChapter.title)
-          .replace(/{{comicTitle}}/g, comic.title)
-          .replace(/{{userName}}/g, sub.fullName || sub.username);
+    // if (subscribers.length > 0) {
+    //   for (const sub of subscribers) {
+    //     const html = emailContent
+    //       .replace(/{{comicCoverUrl}}/g, generateFileUrl(comic.image))
+    //       .replace(/{{chapterTitle}}/g, newChapter.title)
+    //       .replace(/{{comicTitle}}/g, comic.title)
+    //       .replace(/{{userName}}/g, sub.fullName || sub.username);
 
-        try {
-          await sendMail(
-            sub.email,
-            `New Chapter: ${newChapter.title} — ${comic.title}`,
-            html
-          );
-        } catch (mailErr) {
-          console.error(`Failed to send email to ${sub.email}:`, mailErr);
-        }
-      }
-    }
+    //     try {
+    //       await sendMail(
+    //         sub.email,
+    //         `New Chapter: ${newChapter.title} — ${comic.title}`,
+    //         html
+    //       );
+    //     } catch (mailErr) {
+    //       console.error(`Failed to send email to ${sub.email}:`, mailErr);
+    //     }
+    //   }
+    // }
+
+    await notifyComicSubscribers({
+      comic,
+      chapter: newChapter,
+    });
 
     return res.status(201).json({
       success: true,
@@ -1012,6 +1019,72 @@ export const getChapterComments = async (req, res) => {
     });
   }
 };
+
+async function notifyComicSubscribers({
+  comic,
+  chapter,
+}: {
+  comic: any;
+  chapter: any;
+}) {
+  const subscribers = await db
+    .select({
+      readerId: readerProfile.id,
+      email: authUsers.email,
+      username: authUsers.username,
+      fullName: readerProfile.fullName,
+    })
+    .from(comicSubscribers)
+    .innerJoin(readerProfile, eq(comicSubscribers.readerId, readerProfile.id))
+    .innerJoin(authUsers, eq(readerProfile.userId, authUsers.id))
+    .where(eq(comicSubscribers.comicId, comic.id));
+
+  for (const sub of subscribers) {
+    /* 1️⃣ Save in-app notification */
+    await db.insert(notifications).values({
+      readerId: sub.readerId,
+      type: "NEW_CHAPTER",
+      comicId: comic.id,
+      chapterId: chapter.id,
+      title: "New chapter available",
+      body: `${comic.title} just dropped a new chapter`,
+    });
+
+    /* 2️⃣ Push notification */
+    const tokens = await db
+      .select()
+      .from(deviceTokens)
+      .where(eq(deviceTokens.readerId, sub.readerId));
+
+    for (const t of tokens) {
+      await sendPushNotification(t.token, {
+        title: "New Chapter 🔥",
+        body: `${comic.title} just dropped a new chapter`,
+        data: {
+          comicId: comic.id,
+          chapterId: chapter.id,
+        },
+      });
+    }
+
+    /* 3️⃣ Email (what you already had) */
+    const html = emailContent
+      .replace(/{{comicCoverUrl}}/g, generateFileUrl(comic.image))
+      .replace(/{{chapterTitle}}/g, chapter.title)
+      .replace(/{{comicTitle}}/g, comic.title)
+      .replace(/{{userName}}/g, sub.fullName || sub.username);
+
+    try {
+      await sendMail(
+        sub.email,
+        `New Chapter: ${chapter.title} — ${comic.title}`,
+        html
+      );
+    } catch (err) {
+      console.error(`Email failed for ${sub.email}`, err);
+    }
+  }
+}
 
 const emailContent = `<!DOCTYPE html>
 <html lang="en">
