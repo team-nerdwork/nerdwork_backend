@@ -21,7 +21,7 @@ router.get("/reader/:slug", fetchComicBySlugForReaders);
 router.delete("/delete/:slug", deleteComicBySlug);
 router.post("/subscribe/:comicId", subscribeForcomic);
 router.post("/", fetchAllPublicComics);
-router.get("/comics/shared/:slug", fetchSharedComicBySlug);
+router.get("/shared/:slug", fetchSharedComicBySlug);
 
 /**
  * @swagger
@@ -278,7 +278,7 @@ router.get("/comics/shared/:slug", fetchSharedComicBySlug);
 /**
  * @swagger
  * /comics:
- *   get:
+ *  get:
  *     summary: Get all published comics (public)
  *     description: Fetches all published comics with minimal details for public and mobile consumption.
  *     tags: [Comics]
