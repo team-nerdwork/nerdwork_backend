@@ -1,5 +1,10 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { eq, and } from "drizzle-orm";
+import { db } from "../config/db";
+import { readerProfile } from "../model/profile";
+import { chapters, paidChapters } from "../model/chapter";
+import { getUserJwtFromToken } from "../controller/library.controller";
 import { authenticate } from "../middleware/common/auth";
 
 const router = Router();
@@ -76,10 +81,82 @@ router.get(
   authenticate,
   async (req: Request, res: Response, _next: NextFunction) => {
     const { creatorId, fileName } = req.params;
-
-    const s3Key = buildS3Key({ creatorId, fileName });
+    const chapterId = req.query.chapterId as string | undefined;
+    let s3Key = "";
 
     try {
+      const userId = getUserJwtFromToken(req);
+
+      if (!chapterId) {
+        res.status(400).json({
+          success: false,
+          error: "chapterId is required",
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      const [reader] = await db
+        .select()
+        .from(readerProfile)
+        .where(eq(readerProfile.userId, userId));
+
+      if (!reader) {
+        res.status(404).json({
+          success: false,
+          error: "Reader profile not found",
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      const [chapter] = await db
+        .select()
+        .from(chapters)
+        .where(eq(chapters.id, chapterId));
+
+      if (!chapter) {
+        res.status(404).json({
+          success: false,
+          error: "Chapter not found",
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      if (chapter.chapterType === "paid") {
+        const [paid] = await db
+          .select()
+          .from(paidChapters)
+          .where(
+            and(
+              eq(paidChapters.readerId, reader.id),
+              eq(paidChapters.chapterId, chapter.id)
+            )
+          );
+
+        if (!paid) {
+          res.status(403).json({
+            success: false,
+            error: "Chapter not purchased",
+            timestamp: new Date().toISOString(),
+          });
+          return;
+        }
+      }
+
+      s3Key = buildS3Key({ creatorId, fileName });
+
+      const chapterPages = Array.isArray(chapter.pages) ? chapter.pages : [];
+      if (!chapterPages.includes(s3Key)) {
+        res.status(403).json({
+          success: false,
+          error: "File does not belong to chapter",
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
       const command = new GetObjectCommand({
         Bucket: S3_BUCKET,
         Key: s3Key,
@@ -155,6 +232,15 @@ router.get(
 
       bodyStream.pipe(res);
     } catch (err: any) {
+      if (err?.message === "Unauthorized") {
+        res.status(401).json({
+          success: false,
+          error: "Unauthorized",
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
       const name = err?.name;
       const httpStatus = err?.$metadata?.httpStatusCode;
 
@@ -200,4 +286,3 @@ router.get(
 );
 
 export default router;
-
