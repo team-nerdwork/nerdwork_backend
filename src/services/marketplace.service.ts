@@ -59,10 +59,7 @@ export const listNftForSale = async (
 ) => {
   try {
     // Verify NFT exists and belongs to seller
-    const nftRecord = await db
-      .select()
-      .from(nft)
-      .where(eq(nft.id, nftId));
+    const nftRecord = await db.select().from(nft).where(eq(nft.id, nftId));
 
     if (!nftRecord || nftRecord.length === 0) {
       throw new Error("NFT not found");
@@ -82,8 +79,14 @@ export const listNftForSale = async (
 
     // Verify minimum price
     const config = await getMarketplaceConfig();
-    const minimumPrice = safeParseFloat(config.minimumListingPrice, "minimumListingPrice");
-    const maximumPrice = safeParseFloat(config.maximumListingPrice, "maximumListingPrice");
+    const minimumPrice = safeParseFloat(
+      config.minimumListingPrice,
+      "minimumListingPrice"
+    );
+    const maximumPrice = safeParseFloat(
+      config.maximumListingPrice,
+      "maximumListingPrice"
+    );
 
     if (price < minimumPrice || price > maximumPrice) {
       throw new Error(
@@ -177,7 +180,6 @@ export const getActiveListings = async (
     throw error;
   }
 };
-
 
 /**
  * Get listing details
@@ -304,7 +306,9 @@ export const purchaseNft = async (
     const purchasePrice = safeParseFloat(listing.price, "price");
     const platformFeeAmount = (purchasePrice * platformFeePercentage) / 100;
     const royaltyAmount = listing.royaltyPercentage
-      ? (purchasePrice * safeParseFloat(listing.royaltyPercentage, "royaltyPercentage")) / 100
+      ? (purchasePrice *
+          safeParseFloat(listing.royaltyPercentage, "royaltyPercentage")) /
+        100
       : 0;
     const sellerAmount = purchasePrice - platformFeeAmount - royaltyAmount;
 
@@ -344,9 +348,7 @@ export const purchaseNft = async (
     if (!spendTransaction) {
       throw new Error("Failed to create spend transaction");
     }
-
-    // 10. Create order
-    const [order] = await tx
+    const orders = await tx
       .insert(nftOrders)
       .values({
         listingId,
@@ -366,12 +368,14 @@ export const purchaseNft = async (
       })
       .returning();
 
+    const order = orders?.[0];
+
     if (!order) {
       throw new Error("Failed to create order");
     }
 
     // 11. Create order transaction record
-    const [orderTransaction] = await tx
+    const orderTransactions = await tx
       .insert(nftOrderTransactions)
       .values({
         orderId: order.id,
@@ -385,6 +389,12 @@ export const purchaseNft = async (
         description: `NFT Purchase: ${listing.title}`,
       })
       .returning();
+
+    const orderTransaction = orderTransactions?.[0];
+
+    if (!orderTransaction) {
+      throw new Error("Failed to create order transaction");
+    }
 
     // 12. Update listing to sold
     await tx
@@ -401,9 +411,10 @@ export const purchaseNft = async (
       .from(marketplaceEscrow)
       .where(eq(marketplaceEscrow.sellerId, listing.sellerId));
 
-    const currentEarnings = escrowData.length > 0
-      ? safeParseFloat(escrowData[0].totalEarnings, "totalEarnings")
-      : 0;
+    const currentEarnings =
+      escrowData.length > 0
+        ? safeParseFloat(escrowData[0].totalEarnings, "totalEarnings")
+        : 0;
     const newEarnings = currentEarnings + sellerAmount;
 
     if (escrowData.length > 0) {
@@ -449,7 +460,9 @@ export const purchaseNft = async (
       console.error("NFT transfer failed:", transferError);
       // CRITICAL FIX: Fail entire transaction if NFT transfer fails
       throw new Error(
-        `NFT transfer failed: ${transferError.message || "Unknown blockchain error"}. Transaction rolled back.`
+        `NFT transfer failed: ${
+          transferError.message || "Unknown blockchain error"
+        }. Transaction rolled back.`
       );
     }
 
@@ -466,7 +479,6 @@ export const purchaseNft = async (
     };
   });
 };
-
 
 /**
  * Cancel listing
@@ -602,7 +614,10 @@ export const requestSellerWithdrawal = async (
     }
 
     const escrow = escrowData[0];
-    const availableBalance = safeParseFloat(escrow.availableBalance, "availableBalance");
+    const availableBalance = safeParseFloat(
+      escrow.availableBalance,
+      "availableBalance"
+    );
 
     if (amount > availableBalance) {
       throw new Error(
@@ -698,16 +713,15 @@ export const getMarketplaceStats = async () => {
       .limit(1);
 
     return {
-      totalActiveListings:
-        totalListingsResult[0]?.count || 0,
-      totalCompletedSales:
-        totalSalesResult[0]?.count || 0,
+      totalActiveListings: totalListingsResult[0]?.count || 0,
+      totalCompletedSales: totalSalesResult[0]?.count || 0,
       totalVolume: volumeResult[0]?.total
         ? safeParseFloat(volumeResult[0].total.toString(), "totalVolume")
         : 0,
-      floorPrice: floorPriceResult.length > 0
-        ? safeParseFloat(floorPriceResult[0].price, "floorPrice")
-        : 0,
+      floorPrice:
+        floorPriceResult.length > 0
+          ? safeParseFloat(floorPriceResult[0].price, "floorPrice")
+          : 0,
     };
   } catch (error) {
     console.error("Error fetching marketplace stats:", error);
