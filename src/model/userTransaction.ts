@@ -29,6 +29,7 @@ export const userTransactionStatusEnum = pgEnum("user_transaction_status", [
 export const spendCategoryEnum = pgEnum("spend_category", [
   "chapter_unlock",
   "comic_purchase",
+  "nft_purchase",
   "tip_creator",
   "subscription",
   "marketplace_purchase",

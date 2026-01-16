@@ -98,6 +98,7 @@ export const createUserSpendTransaction = async (
   spendCategory:
     | "chapter_unlock"
     | "comic_purchase"
+    | "nft_purchase"
     | "tip_creator"
     | "subscription"
     | "marketplace_purchase",

@@ -12,6 +12,7 @@ import {
 import { nft } from "../model/nft";
 import { userWallets } from "../model/schema";
 import { readerProfile } from "../model/profile";
+import { userTransactions } from "../model/userTransaction";
 import { AnchorTransferService } from "./anchor.transfer.service";
 
 /**
@@ -81,8 +82,8 @@ export const listNftForSale = async (
 
     // Verify minimum price
     const config = await getMarketplaceConfig();
-    const minimumPrice = parseFloat(config.minimumListingPrice as any);
-    const maximumPrice = parseFloat(config.maximumListingPrice as any);
+    const minimumPrice = safeParseFloat(config.minimumListingPrice, "minimumListingPrice");
+    const maximumPrice = safeParseFloat(config.maximumListingPrice, "maximumListingPrice");
 
     if (price < minimumPrice || price > maximumPrice) {
       throw new Error(
@@ -216,7 +217,18 @@ export const getListingDetails = async (listingId: string) => {
 };
 
 /**
- * Purchase NFT
+ * Safe parseFloat that throws on NaN
+ */
+const safeParseFloat = (value: any, fieldName: string): number => {
+  const parsed = parseFloat(value);
+  if (isNaN(parsed)) {
+    throw new Error(`Invalid numeric value for ${fieldName}: ${value}`);
+  }
+  return parsed;
+};
+
+/**
+ * Purchase NFT - Complete atomic transaction
  */
 export const purchaseNft = async (
   listingId: string,
@@ -224,9 +236,10 @@ export const purchaseNft = async (
   buyerWalletAddress: string,
   sellerWalletAddress: string
 ) => {
-  try {
-    // Get listing details
-    const listingData = await db
+  // Execute entire purchase in atomic transaction
+  return await db.transaction(async (tx) => {
+    // 1. Get listing details
+    const listingData = await tx
       .select()
       .from(nftListings)
       .where(eq(nftListings.id, listingId));
@@ -241,33 +254,99 @@ export const purchaseNft = async (
       throw new Error("Listing is no longer active");
     }
 
-    // Get marketplace config for fees
+    // 2. Get buyer's reader profile (needed for balance check and self-purchase validation)
+    const readerData = await tx
+      .select()
+      .from(readerProfile)
+      .where(eq(readerProfile.id, buyerId));
+
+    if (!readerData || readerData.length === 0) {
+      throw new Error("Buyer profile not found");
+    }
+
+    const buyer = readerData[0];
+
+    // 3. Get buyer's wallet to validate not purchasing own NFT
+    const buyerWalletData = await tx
+      .select()
+      .from(userWallets)
+      .where(eq(userWallets.primaryWalletAddress, buyerWalletAddress));
+
+    if (!buyerWalletData || buyerWalletData.length === 0) {
+      throw new Error("Buyer wallet not found");
+    }
+
+    const buyerWallet = buyerWalletData[0];
+
+    // 4. Validate seller is not buyer (compare wallet IDs)
+    if (listing.sellerId === buyerWallet.id) {
+      throw new Error("Cannot purchase your own NFT");
+    }
+
+    // 5. Verify NFT exists and belongs to seller
+    const nftData = await tx
+      .select()
+      .from(nft)
+      .where(eq(nft.id, listing.nftId));
+
+    if (!nftData || nftData.length === 0) {
+      throw new Error("NFT not found");
+    }
+
+    // 6. Get marketplace config for fees
     const config = await getMarketplaceConfig();
-    const platformFeePercentage = parseFloat(
-      config.platformFeePercentage as any
+    const platformFeePercentage = safeParseFloat(
+      config.platformFeePercentage,
+      "platformFeePercentage"
     );
 
-    // Calculate amounts
-    const purchasePrice = parseFloat(listing.price as any);
-    const platformFeeAmount =
-      (purchasePrice * platformFeePercentage) / 100;
+    // 7. Calculate amounts with safe parsing
+    const purchasePrice = safeParseFloat(listing.price, "price");
+    const platformFeeAmount = (purchasePrice * platformFeePercentage) / 100;
     const royaltyAmount = listing.royaltyPercentage
-      ? (purchasePrice * parseFloat(listing.royaltyPercentage as any)) / 100
+      ? (purchasePrice * safeParseFloat(listing.royaltyPercentage, "royaltyPercentage")) / 100
       : 0;
     const sellerAmount = purchasePrice - platformFeeAmount - royaltyAmount;
 
-    // Get buyer's reader profile for transaction
-    const readerData = await db
-      .select()
-      .from(readerProfile)
-      .where(eq(readerProfile.userId, buyerId));
-
-    if (!readerData || readerData.length === 0) {
-      throw new Error("Buyer reader profile not found");
+    // 8. CHECK BUYER BALANCE FIRST - Critical fix
+    const currentBalance = buyer.walletBalance || 0;
+    if (currentBalance < purchasePrice) {
+      throw new Error(
+        `Insufficient balance. Required: ${purchasePrice} NWT, Available: ${currentBalance} NWT`
+      );
     }
 
-    // Create order
-    const orderResult = await db
+    // 8. Deduct NWT from buyer's wallet
+    const newBuyerBalance = currentBalance - purchasePrice;
+    await tx
+      .update(readerProfile)
+      .set({
+        walletBalance: newBuyerBalance,
+        updatedAt: new Date(),
+      })
+      .where(eq(readerProfile.id, buyerId));
+
+    // 9. Create user spend transaction
+    const [spendTransaction] = await tx
+      .insert(userTransactions)
+      .values({
+        userId: buyerId,
+        transactionType: "spend",
+        status: "completed",
+        nwtAmount: purchasePrice.toString(),
+        description: `NFT Purchase: ${listing.title}`,
+        spendCategory: "nft_purchase",
+        contentId: listing.nftId,
+        creatorId: listing.sellerId,
+      })
+      .returning();
+
+    if (!spendTransaction) {
+      throw new Error("Failed to create spend transaction");
+    }
+
+    // 10. Create order
+    const [order] = await tx
       .insert(nftOrders)
       .values({
         listingId,
@@ -281,23 +360,24 @@ export const purchaseNft = async (
         platformFeeAmount: platformFeeAmount.toString(),
         royaltyAmount: royaltyAmount.toString(),
         sellerAmount: sellerAmount.toString(),
-        status: "pending",
+        status: "completed",
+        transactionId: spendTransaction.id,
+        completedAt: new Date(),
       })
       .returning();
 
-    const order = Array.isArray(orderResult) ? orderResult[0] : (orderResult as any)[0];
     if (!order) {
       throw new Error("Failed to create order");
     }
 
-    // Create transaction record
-    const transactionResult = await db
+    // 11. Create order transaction record
+    const [orderTransaction] = await tx
       .insert(nftOrderTransactions)
       .values({
         orderId: order.id,
-        buyerId: readerData[0].id,
+        buyerId: buyerId,
         transactionType: "marketplace_purchase",
-        status: "pending",
+        status: "completed",
         totalAmount: purchasePrice.toString(),
         platformFeeAmount: platformFeeAmount.toString(),
         sellerAmount: sellerAmount.toString(),
@@ -306,11 +386,77 @@ export const purchaseNft = async (
       })
       .returning();
 
-    const transaction = Array.isArray(transactionResult) ? transactionResult[0] : (transactionResult as any)[0];
+    // 12. Update listing to sold
+    await tx
+      .update(nftListings)
+      .set({
+        status: "sold",
+        soldAt: new Date(),
+      })
+      .where(eq(nftListings.id, listingId));
+
+    // 13. Update seller's escrow - CRITICAL: Must succeed
+    const escrowData = await tx
+      .select()
+      .from(marketplaceEscrow)
+      .where(eq(marketplaceEscrow.sellerId, listing.sellerId));
+
+    const currentEarnings = escrowData.length > 0
+      ? safeParseFloat(escrowData[0].totalEarnings, "totalEarnings")
+      : 0;
+    const newEarnings = currentEarnings + sellerAmount;
+
+    if (escrowData.length > 0) {
+      await tx
+        .update(marketplaceEscrow)
+        .set({
+          totalEarnings: newEarnings.toString(),
+          availableBalance: newEarnings.toString(),
+          updatedAt: new Date(),
+        })
+        .where(eq(marketplaceEscrow.sellerId, listing.sellerId));
+    } else {
+      await tx.insert(marketplaceEscrow).values({
+        sellerId: listing.sellerId,
+        totalEarnings: newEarnings.toString(),
+        availableBalance: newEarnings.toString(),
+      });
+    }
+
+    // 14. Transfer NFT to buyer (blockchain) - MUST succeed
+    let transferSignature: string;
+    try {
+      const transferTx = await AnchorTransferService.transferNft({
+        mintAddress: listing.mintAddress,
+        fromUserProfileId: "",
+        fromUserWalletAddress: listing.sellerWalletAddress,
+        toUserProfileId: buyerId,
+        toUserWalletAddress: buyerWalletAddress,
+      });
+
+      transferSignature = transferTx.signature;
+
+      // Record transfer
+      await tx.insert(nftMarketplaceTransfers).values({
+        orderId: order.id,
+        nftId: listing.nftId,
+        fromWalletAddress: listing.sellerWalletAddress,
+        toWalletAddress: buyerWalletAddress,
+        transactionHash: transferSignature,
+        status: "completed",
+      });
+    } catch (transferError: any) {
+      console.error("NFT transfer failed:", transferError);
+      // CRITICAL FIX: Fail entire transaction if NFT transfer fails
+      throw new Error(
+        `NFT transfer failed: ${transferError.message || "Unknown blockchain error"}. Transaction rolled back.`
+      );
+    }
 
     return {
-      order,
-      transaction,
+      orderId: order.id,
+      transactionId: spendTransaction.id,
+      transferSignature,
       amounts: {
         purchasePrice,
         platformFeeAmount,
@@ -318,119 +464,9 @@ export const purchaseNft = async (
         sellerAmount,
       },
     };
-  } catch (error) {
-    console.error("Error purchasing NFT:", error);
-    throw error;
-  }
+  });
 };
 
-/**
- * Complete purchase (after payment is confirmed)
- */
-export const completePurchase = async (
-  orderId: string,
-  transactionId: string
-) => {
-  try {
-    const orderData = await db
-      .select()
-      .from(nftOrders)
-      .where(eq(nftOrders.id, orderId));
-
-    if (!orderData || orderData.length === 0) {
-      throw new Error("Order not found");
-    }
-
-    const order = orderData[0];
-
-    // Update order status
-    await db
-      .update(nftOrders)
-      .set({
-        status: "completed",
-        transactionId,
-        completedAt: new Date(),
-      })
-      .where(eq(nftOrders.id, orderId));
-
-    // Update transaction status
-    await db
-      .update(nftOrderTransactions)
-      .set({
-        status: "completed",
-        updatedAt: new Date(),
-      })
-      .where(eq(nftOrderTransactions.id, transactionId));
-
-    // Update listing to sold
-    await db
-      .update(nftListings)
-      .set({
-        status: "sold",
-        soldAt: new Date(),
-      })
-      .where(eq(nftListings.id, order.listingId));
-
-    // Update seller's escrow
-    const escrowData = await db
-      .select()
-      .from(marketplaceEscrow)
-      .where(eq(marketplaceEscrow.sellerId, order.sellerId));
-
-    const currentEarnings = escrowData.length > 0 ? parseFloat(escrowData[0].totalEarnings as any) : 0;
-    const newEarnings = currentEarnings + parseFloat(order.sellerAmount as any);
-
-    if (escrowData.length > 0) {
-      await db
-        .update(marketplaceEscrow)
-        .set({
-          totalEarnings: newEarnings.toString(),
-          availableBalance: newEarnings.toString(),
-          updatedAt: new Date(),
-        })
-        .where(eq(marketplaceEscrow.sellerId, order.sellerId));
-    } else {
-      await db.insert(marketplaceEscrow).values({
-        sellerId: order.sellerId,
-        totalEarnings: newEarnings.toString(),
-        availableBalance: newEarnings.toString(),
-      });
-    }
-
-    // Transfer NFT to buyer (blockchain)
-    try {
-      const transferTx = await AnchorTransferService.transferNft({
-        mintAddress: order.mintAddress,
-        fromUserProfileId: "",
-        fromUserWalletAddress: order.sellerWalletAddress,
-        toUserProfileId: order.buyerId,
-        toUserWalletAddress: order.buyerWalletAddress,
-      });
-
-      // Record transfer
-      await db.insert(nftMarketplaceTransfers).values({
-        orderId: order.id,
-        nftId: order.nftId,
-        fromWalletAddress: order.sellerWalletAddress,
-        toWalletAddress: order.buyerWalletAddress,
-        transactionHash: transferTx.signature,
-        status: "completed",
-      });
-    } catch (transferError) {
-      console.error("NFT transfer error:", transferError);
-      // Log the error but don't fail the transaction
-    }
-
-    return {
-      success: true,
-      order,
-      escrowUpdated: true,
-    };
-  } catch (error) {
-    console.error("Error completing purchase:", error);
-    throw error;
-  }
-};
 
 /**
  * Cancel listing
@@ -553,14 +589,24 @@ export const requestSellerWithdrawal = async (
   sellerId: string,
   amount: number
 ) => {
-  try {
+  // Use transaction to ensure balance is reserved atomically
+  return await db.transaction(async (tx) => {
     // Get escrow balance
-    const escrow = await getSellerEscrowBalance(sellerId);
-    const availableBalance = parseFloat(escrow.availableBalance as any);
+    const escrowData = await tx
+      .select()
+      .from(marketplaceEscrow)
+      .where(eq(marketplaceEscrow.sellerId, sellerId));
+
+    if (!escrowData || escrowData.length === 0) {
+      throw new Error("No escrow account found for seller");
+    }
+
+    const escrow = escrowData[0];
+    const availableBalance = safeParseFloat(escrow.availableBalance, "availableBalance");
 
     if (amount > availableBalance) {
       throw new Error(
-        `Insufficient balance. Available: ${availableBalance} NWT`
+        `Insufficient balance. Available: ${availableBalance} NWT, Requested: ${amount} NWT`
       );
     }
 
@@ -568,8 +614,18 @@ export const requestSellerWithdrawal = async (
       throw new Error("Withdrawal amount must be greater than 0");
     }
 
+    // Reserve the balance by reducing available balance
+    const newAvailableBalance = availableBalance - amount;
+    await tx
+      .update(marketplaceEscrow)
+      .set({
+        availableBalance: newAvailableBalance.toString(),
+        updatedAt: new Date(),
+      })
+      .where(eq(marketplaceEscrow.sellerId, sellerId));
+
     // Create withdrawal request
-    const [withdrawal] = await db
+    const [withdrawal] = await tx
       .insert(sellerWithdrawals)
       .values({
         sellerId,
@@ -578,11 +634,12 @@ export const requestSellerWithdrawal = async (
       })
       .returning();
 
+    if (!withdrawal) {
+      throw new Error("Failed to create withdrawal request");
+    }
+
     return withdrawal;
-  } catch (error) {
-    console.error("Error requesting withdrawal:", error);
-    throw error;
-  }
+  });
 };
 
 /**
@@ -646,10 +703,10 @@ export const getMarketplaceStats = async () => {
       totalCompletedSales:
         totalSalesResult[0]?.count || 0,
       totalVolume: volumeResult[0]?.total
-        ? parseFloat(volumeResult[0].total.toString())
+        ? safeParseFloat(volumeResult[0].total.toString(), "totalVolume")
         : 0,
       floorPrice: floorPriceResult.length > 0
-        ? parseFloat(floorPriceResult[0].price as any)
+        ? safeParseFloat(floorPriceResult[0].price, "floorPrice")
         : 0,
     };
   } catch (error) {

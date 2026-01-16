@@ -44,6 +44,7 @@ export const nft = pgTable('nfts', {
   price: integer('price').default(0),
   isLimitedEdition: boolean('is_limited_edition').default(false),
   amount: integer("amount").default(1),
+  tags: json('tags').$type<string[]>(), // Tags like 'fiction', 'mystery', 'romance', etc.
   metadata: json('metadata'),
   status: text('status').notNull(), // 'pending', 'minting', 'completed', 'transferred'
   createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),

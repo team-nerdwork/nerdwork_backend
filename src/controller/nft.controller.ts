@@ -258,6 +258,9 @@ export const mintApiNFT = async (req, res) => {
       publishDate,
       collectionId,
       attributes,
+      price,
+      itemSupply,
+      tags,
       transferImmediately = true,
     } = req.body;
 
@@ -268,15 +271,37 @@ export const mintApiNFT = async (req, res) => {
         .json({ error: "userProfileId, name, and description are required" });
     }
 
+    // Validate price if provided
+    if (price !== undefined && (typeof price !== "number" || price < 0)) {
+      return res.status(400).json({ error: "Price must be a non-negative number" });
+    }
+
+    // Validate itemSupply if provided
+    if (itemSupply !== undefined && (typeof itemSupply !== "number" || itemSupply < 1)) {
+      return res.status(400).json({ error: "Item supply must be a positive number" });
+    }
+
+    // Parse tags if provided
+    let parsedTags: string[] = [];
+    if (tags) {
+      try {
+        parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+        if (!Array.isArray(parsedTags)) {
+          return res.status(400).json({ error: "Tags must be an array of strings" });
+        }
+      } catch (error) {
+        return res.status(400).json({ error: "Invalid tags format" });
+      }
+    }
+
     // Get user's wallet from database
-    const userWallet = "await getUserWalletByUserId(userProfileId);";
+    const userWallet = await getUserWalletByUserId(userProfileId);
     if (!userWallet) {
       return res.status(404).json({ error: "User wallet not found" });
     }
 
     // Get user's primary Solana address
-    const userSolanaWallet =
-      "await getUserPrimarySolanaAddress(userWallet.id);";
+    const userSolanaWallet = await getUserPrimarySolanaAddress(userWallet.id);
     if (!userSolanaWallet) {
       return res
         .status(404)
@@ -370,24 +395,37 @@ export const mintApiNFT = async (req, res) => {
     console.log("Creating NFT...");
     const createResult = await create(umi, mintParams).sendAndConfirm(umi);
 
-    //save nft to database
-    // await db.insert(nft).values({
-    //   owner: userWallet, // UUID from the user wallet
-    //   colection: collectionId ?? "standalone", // optional or default string
-    //   isLimitedEdition: false, // or true if it's a limited edition
-    //   amount: 1, // assume 1 NFT minted
-    //   metadata: {
-    //     name,
-    //     description,
-    //     author,
-    //     image: req.file.path,
-    //     uri: metadataUri,
-    //     assetId: assetSigner.publicKey,
-    //     attributes: comicAttributes,
-    //     mintSignature: createResult.signature,
-    //   },
-    //   status: "completed", // or 'pending' if there's more flow
-    // });
+    // Determine if limited edition based on itemSupply
+    const nftAmount = itemSupply || 1;
+    const isLimited = nftAmount > 1;
+
+    // Save NFT to database
+    const [createdNftRecord] = await db.insert(nft).values({
+      owner: userWallet.id, // UUID from the user wallet
+      colection: collectionId ?? "standalone",
+      nftType: "anchor",
+      mintAddress: assetSigner.publicKey.toString(),
+      price: price || 0,
+      isLimitedEdition: isLimited,
+      amount: nftAmount,
+      tags: parsedTags.length > 0 ? parsedTags : null,
+      metadata: {
+        name,
+        description,
+        author,
+        series,
+        issue,
+        genre,
+        pages,
+        publishDate,
+        image: metadataUri, // Use the uploaded URI, not local path
+        uri: metadataUri,
+        assetId: assetSigner.publicKey.toString(),
+        attributes: comicAttributes,
+        mintSignature: createResult.signature,
+      },
+      status: "completed",
+    }).returning();
 
     let transferResult = null;
 

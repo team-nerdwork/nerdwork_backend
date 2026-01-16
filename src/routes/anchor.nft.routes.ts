@@ -89,6 +89,18 @@ router.get("/health", healthCheck);
  *         name: attributes
  *         type: string
  *         description: JSON string of NFT attributes
+ *       - in: formData
+ *         name: price
+ *         type: number
+ *         description: NFT price (optional, defaults to 0)
+ *       - in: formData
+ *         name: itemSupply
+ *         type: number
+ *         description: Number of NFT copies to mint (defaults to 1, >1 makes it limited edition)
+ *       - in: formData
+ *         name: tags
+ *         type: string
+ *         description: JSON array of genre/category tags (e.g., ["fiction", "mystery", "romance"])
  *     responses:
  *       200:
  *         description: NFT minted successfully
@@ -146,6 +158,17 @@ router.post("/mint", uploadMiddleware.single("image"), mintNftWithImage);
  *               attributes:
  *                 type: string
  *                 description: JSON string of attributes
+ *               price:
+ *                 type: number
+ *                 description: NFT price (optional, defaults to 0)
+ *               itemSupply:
+ *                 type: number
+ *                 description: Number of NFT copies to mint (defaults to 1)
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array of genre/category tags (e.g., ["fiction", "mystery", "romance"])
  *     responses:
  *       200:
  *         description: NFT minted successfully
