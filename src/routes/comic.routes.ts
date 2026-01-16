@@ -20,7 +20,7 @@ router.get("/:slug", fetchComicBySlug);
 router.get("/reader/:slug", fetchComicBySlugForReaders);
 router.delete("/delete/:slug", deleteComicBySlug);
 router.post("/subscribe/:comicId", subscribeForcomic);
-router.post("/public", fetchAllPublicComics);
+router.get("/public", fetchAllPublicComics);
 router.get("/shared/:slug", fetchSharedComicBySlug);
 
 /**
