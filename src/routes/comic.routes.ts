@@ -13,6 +13,8 @@ import {
 
 const router = Router();
 
+router.get("/public", fetchAllPublicComics);
+router.get("/shared/:slug", fetchSharedComicBySlug);
 router.post("/create", createComic);
 router.get("/mine", fetchAllComicByJwt);
 router.get("/all-comics", fetchAllComics);
@@ -20,8 +22,6 @@ router.get("/:slug", fetchComicBySlug);
 router.get("/reader/:slug", fetchComicBySlugForReaders);
 router.delete("/delete/:slug", deleteComicBySlug);
 router.post("/subscribe/:comicId", subscribeForcomic);
-router.get("/public", fetchAllPublicComics);
-router.get("/shared/:slug", fetchSharedComicBySlug);
 
 /**
  * @swagger
