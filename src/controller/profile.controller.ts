@@ -72,20 +72,35 @@ export const getCreatorProfile = async (req, res) => {
 
     const token = authHeader.split(" ")[1];
     const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
-
     const userId = decoded.userId;
 
-    // Try fetching creator profile
+    // Fetch creator profile
     const [creator] = await db
       .select()
       .from(creatorProfile)
       .where(eq(creatorProfile.userId, userId));
 
-    if (creator) {
-      return res.json({ role: "creator", profile: creator });
+    if (!creator) {
+      return res.status(404).json({ message: "Profile not found" });
     }
 
-    return res.status(404).json({ message: "Profile not found" });
+    // Fetch bank details (optional)
+    const [bankDetails] = await db
+      .select({
+        bankName: creatorBankDetails.bankName,
+        accountNumber: creatorBankDetails.accountNumber,
+        accountName: creatorBankDetails.accountName,
+      })
+      .from(creatorBankDetails)
+      .where(eq(creatorBankDetails.creatorId, creator.id));
+
+    return res.json({
+      role: "creator",
+      profile: {
+        ...creator,
+        bankDetails: bankDetails || null,
+      },
+    });
   } catch (err) {
     console.error(err);
     return res.status(401).json({ message: "Invalid or expired token" });
