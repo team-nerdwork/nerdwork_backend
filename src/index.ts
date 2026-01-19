@@ -15,6 +15,7 @@ import transactionRoutes from "./routes/transaction.routes";
 import nftRouterV2 from "./routes/anchor.nft.routes";
 import marketplaceRoutes from "./routes/marketplace.routes";
 import notificationRoutes from "./routes/notification.routes";
+import mobileComicsRoutes from "./routes/mobile.comics.routes";
 import { AnchorConfig } from "./config/anchor.config";
 
 const PORT = 5000;
@@ -52,6 +53,7 @@ function registerRoutes() {
   app.use("/anchor-nft", nftRouterV2);
   app.use("/marketplace", marketplaceRoutes);
   app.use("/notifications", notificationRoutes);
+  app.use("/mobile", mobileComicsRoutes);
 }
 
 /**
