@@ -16,7 +16,7 @@ const s3Client = new S3Client({
   region: S3_REGION,
 });
 
-function buildS3Key(params: { creatorId: string; fileName: string }): string {
+function buildS3Key(params: { creatorId: any; fileName: any }) {
   return ["creators", params.creatorId, params.fileName].join("/");
 }
 
@@ -131,8 +131,8 @@ router.get(
           .where(
             and(
               eq(paidChapters.readerId, reader.id),
-              eq(paidChapters.chapterId, chapter.id)
-            )
+              eq(paidChapters.chapterId, chapter.id),
+            ),
           );
 
         if (!paid) {
@@ -202,7 +202,7 @@ router.get(
           bucket: S3_BUCKET,
           key: s3Key,
           status: "streaming",
-        })
+        }),
       );
 
       const bodyStream = s3Response.Body as NodeJS.ReadableStream;
@@ -216,7 +216,7 @@ router.get(
             key: s3Key,
             status: "error",
             message: (err as Error).message,
-          })
+          }),
         );
 
         if (!res.headersSent) {
@@ -251,7 +251,7 @@ router.get(
             bucket: S3_BUCKET,
             key: s3Key,
             status: "not_found",
-          })
+          }),
         );
 
         res.status(404).json({
@@ -269,7 +269,7 @@ router.get(
           key: s3Key,
           status: "error",
           message: err?.message,
-        })
+        }),
       );
 
       if (!res.headersSent) {
@@ -282,7 +282,7 @@ router.get(
         res.end();
       }
     }
-  }
+  },
 );
 
 export default router;
