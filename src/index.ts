@@ -16,6 +16,7 @@ import nftRouterV2 from "./routes/anchor.nft.routes";
 import marketplaceRoutes from "./routes/marketplace.routes";
 import notificationRoutes from "./routes/notification.routes";
 import mobileComicsRoutes from "./routes/mobile.comics.routes";
+import analyticsRoutes from "./routes/analytics.routes";
 import { AnchorConfig } from "./config/anchor.config";
 
 const PORT = 5000;
@@ -54,6 +55,7 @@ function registerRoutes() {
   app.use("/marketplace", marketplaceRoutes);
   app.use("/notifications", notificationRoutes);
   app.use("/mobile", mobileComicsRoutes);
+  app.use("/analytics", analyticsRoutes);
 }
 
 /**
@@ -82,7 +84,7 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`\n🚀 Server running at http://localhost:${PORT}`);
       console.log(
-        `📚 Swagger docs available at http://localhost:${PORT}/api-docs`
+        `📚 Swagger docs available at http://localhost:${PORT}/api-docs`,
       );
       console.log(`\nAvailable endpoints:`);
       console.log(`  • NFT Minting: /api/anchor-nft`);
