@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { raw, Request, Response } from "express";
 import {
   listNftForSale,
   getActiveListings,
@@ -61,7 +61,7 @@ export const listNft = async (req: Request, res: Response): Promise<void> => {
       price,
       title,
       description,
-      royaltyPercentage || 0
+      royaltyPercentage || 0,
     );
 
     res.status(201).json({
@@ -83,7 +83,7 @@ export const listNft = async (req: Request, res: Response): Promise<void> => {
  */
 export const getListings = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const {
@@ -103,7 +103,7 @@ export const getListings = async (
         maxPrice: maxPrice ? parseFloat(maxPrice as string) : undefined,
         sellerId: sellerId as string,
         sortBy: (sortBy as any) || "newest",
-      }
+      },
     );
 
     res.json({
@@ -124,10 +124,13 @@ export const getListings = async (
  */
 export const getListingInfo = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
-    const { listingId } = req.params;
+    const rawListingId = req.params.listingId;
+
+    const listingId =
+      typeof rawListingId === "string" ? rawListingId : rawListingId?.[0];
 
     if (!listingId) {
       res.status(400).json({ error: "Listing ID is required" });
@@ -171,7 +174,7 @@ export const buyNft = async (req: Request, res: Response): Promise<void> => {
       listingId,
       buyerId,
       buyerWalletAddress,
-      sellerWalletAddress
+      sellerWalletAddress,
     );
 
     res.status(201).json({
@@ -198,8 +201,11 @@ export const buyNft = async (req: Request, res: Response): Promise<void> => {
  */
 export const delistNft = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { listingId } = req.params;
+    const rawListingId = req.params.listingId;
     const { sellerId } = req.body;
+
+    const listingId =
+      typeof rawListingId === "string" ? rawListingId : rawListingId?.[0];
 
     if (!listingId || !sellerId) {
       res.status(400).json({
@@ -229,10 +235,13 @@ export const delistNft = async (req: Request, res: Response): Promise<void> => {
  */
 export const getEscrowBalance = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
-    const { sellerId } = req.params;
+    const rawSellerId = req.params.sellerId;
+
+    const sellerId =
+      typeof rawSellerId === "string" ? rawSellerId : rawSellerId?.[0];
 
     if (!sellerId) {
       res.status(400).json({ error: "Seller ID is required" });
@@ -259,11 +268,14 @@ export const getEscrowBalance = async (
  */
 export const getSellerSales = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
-    const { sellerId } = req.params;
+    const rawSellerId = req.params.sellerId;
     const { limit = 20, offset = 0 } = req.query;
+
+    const sellerId =
+      typeof rawSellerId === "string" ? rawSellerId : rawSellerId?.[0];
 
     if (!sellerId) {
       res.status(400).json({ error: "Seller ID is required" });
@@ -273,7 +285,7 @@ export const getSellerSales = async (
     const sales = await getSellerSalesHistory(
       sellerId,
       parseInt(limit as string),
-      parseInt(offset as string)
+      parseInt(offset as string),
     );
 
     res.json({
@@ -294,11 +306,14 @@ export const getSellerSales = async (
  */
 export const getBuyerPurchases = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
-    const { buyerId } = req.params;
+    const rawBuyerId = req.params.buyerId;
     const { limit = 20, offset = 0 } = req.query;
+
+    const buyerId =
+      typeof rawBuyerId === "string" ? rawBuyerId : rawBuyerId?.[0];
 
     if (!buyerId) {
       res.status(400).json({ error: "Buyer ID is required" });
@@ -308,7 +323,7 @@ export const getBuyerPurchases = async (
     const purchases = await getBuyerPurchaseHistory(
       buyerId,
       parseInt(limit as string),
-      parseInt(offset as string)
+      parseInt(offset as string),
     );
 
     res.json({
@@ -329,7 +344,7 @@ export const getBuyerPurchases = async (
  */
 export const requestWithdrawal = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const { sellerId, amount } = req.body;
@@ -369,11 +384,14 @@ export const requestWithdrawal = async (
  */
 export const getWithdrawalHistory = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
-    const { sellerId } = req.params;
+    const rawSellerId = req.params.sellerId;
     const { limit = 20, offset = 0 } = req.query;
+
+    const sellerId =
+      typeof rawSellerId === "string" ? rawSellerId : rawSellerId?.[0];
 
     if (!sellerId) {
       res.status(400).json({ error: "Seller ID is required" });
@@ -383,7 +401,7 @@ export const getWithdrawalHistory = async (
     const withdrawals = await getSellerWithdrawalHistory(
       sellerId,
       parseInt(limit as string),
-      parseInt(offset as string)
+      parseInt(offset as string),
     );
 
     res.json({

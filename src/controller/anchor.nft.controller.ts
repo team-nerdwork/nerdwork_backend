@@ -1,7 +1,13 @@
 import { Request, Response } from "express";
 import { PublicKey } from "@solana/web3.js";
-import { AnchorMintingService, MintNftRequest } from "../services/anchor.minting.service";
-import { AnchorTransferService, TransferNftRequest } from "../services/anchor.transfer.service";
+import {
+  AnchorMintingService,
+  MintNftRequest,
+} from "../services/anchor.minting.service";
+import {
+  AnchorTransferService,
+  TransferNftRequest,
+} from "../services/anchor.transfer.service";
 import { getAnchorService } from "../services/anchor.program";
 import { PinataService } from "../services/pinata.service";
 import multer from "multer";
@@ -28,8 +34,8 @@ const fileFilter = (_req: any, file: any, cb: any) => {
   } else {
     cb(
       new Error(
-        "Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed."
-      )
+        "Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.",
+      ),
     );
   }
 };
@@ -44,8 +50,11 @@ export const uploadMiddleware = multer({
  * Mint NFT with image upload
  * POST /anchor-nft/mint
  */
-export const mintNftWithImage = async (req: Request, res: Response): Promise<void> => {
-  console.log("hello")
+export const mintNftWithImage = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  console.log("hello");
   try {
     if (!req.file) {
       res.status(400).json({ error: "Image file is required" });
@@ -82,7 +91,7 @@ export const mintNftWithImage = async (req: Request, res: Response): Promise<voi
     try {
       imageUri = await PinataService.uploadImageFile(
         req.file.path,
-        `${nftName}-${Date.now()}`
+        `${nftName}-${Date.now()}`,
       );
     } catch (ipfsError) {
       console.error("IPFS upload error:", ipfsError);
@@ -187,7 +196,10 @@ export const mintNftWithImage = async (req: Request, res: Response): Promise<voi
  * Mint NFT with external image URL (no file upload)
  * POST /anchor-nft/mint-url
  */
-export const mintNftWithUrl = async (req: Request, res: Response): Promise<void> => {
+export const mintNftWithUrl = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const {
       userProfileId,
@@ -207,7 +219,8 @@ export const mintNftWithUrl = async (req: Request, res: Response): Promise<void>
     // Validate required fields
     if (!userProfileId || !userWalletAddress || !nftName || !imageUrl) {
       res.status(400).json({
-        error: "userProfileId, userWalletAddress, nftName, and imageUrl are required",
+        error:
+          "userProfileId, userWalletAddress, nftName, and imageUrl are required",
       });
       return;
     }
@@ -215,7 +228,10 @@ export const mintNftWithUrl = async (req: Request, res: Response): Promise<void>
     // Pin image from URL to Pinata
     let imageUri: string;
     try {
-      imageUri = await PinataService.pinFromUrl(imageUrl, `${nftName}-${Date.now()}`);
+      imageUri = await PinataService.pinFromUrl(
+        imageUrl,
+        `${nftName}-${Date.now()}`,
+      );
     } catch (ipfsError) {
       console.error("IPFS pin error:", ipfsError);
       res.status(500).json({
@@ -302,7 +318,10 @@ export const mintNftWithUrl = async (req: Request, res: Response): Promise<void>
  * Transfer NFT to user
  * POST /anchor-nft/transfer
  */
-export const transferNft = async (req: Request, res: Response): Promise<void> => {
+export const transferNft = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const {
       mintAddress,
@@ -315,7 +334,8 @@ export const transferNft = async (req: Request, res: Response): Promise<void> =>
     // Validate required fields
     if (!mintAddress || !fromUserWalletAddress || !toUserWalletAddress) {
       res.status(400).json({
-        error: "mintAddress, fromUserWalletAddress, and toUserWalletAddress are required",
+        error:
+          "mintAddress, fromUserWalletAddress, and toUserWalletAddress are required",
       });
       return;
     }
@@ -356,7 +376,10 @@ export const transferNft = async (req: Request, res: Response): Promise<void> =>
  * Platform-initiated transfer (mint then transfer)
  * POST /anchor-nft/platform-transfer
  */
-export const platformTransferNft = async (req: Request, res: Response): Promise<void> => {
+export const platformTransferNft = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const { mintAddress, userWalletAddress, userProfileId } = req.body;
 
@@ -371,7 +394,7 @@ export const platformTransferNft = async (req: Request, res: Response): Promise<
       const result = await AnchorTransferService.platformTransferNft(
         mintAddress,
         userWalletAddress,
-        userProfileId
+        userProfileId,
       );
 
       res.status(200).json({
@@ -399,7 +422,10 @@ export const platformTransferNft = async (req: Request, res: Response): Promise<
  * Get user NFTs
  * GET /anchor-nft/user/:userWalletAddress
  */
-export const getUserNfts = async (req: Request, res: Response): Promise<void> => {
+export const getUserNfts = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const { userWalletAddress } = req.params;
 
@@ -435,7 +461,7 @@ export const getUserNfts = async (req: Request, res: Response): Promise<void> =>
               error: "Failed to fetch NFT details",
             };
           }
-        })
+        }),
       );
 
       res.status(200).json({
@@ -466,15 +492,20 @@ export const getUserNfts = async (req: Request, res: Response): Promise<void> =>
  * Get NFT details
  * GET /anchor-nft/:mintAddress
  */
-export const getNftDetails = async (req: Request, res: Response): Promise<void> => {
+export const getNftDetails = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
-    const { mintAddress } = req.params;
+    const rawMintAddress = req.params.mintAddress;
+
+    const mintAddress =
+      typeof rawMintAddress === "string" ? rawMintAddress : rawMintAddress?.[0];
 
     if (!mintAddress) {
       res.status(400).json({ error: "mintAddress is required" });
       return;
     }
-
     try {
       const details = await AnchorMintingService.getNftDetails(mintAddress);
 
@@ -505,7 +536,10 @@ export const getNftDetails = async (req: Request, res: Response): Promise<void> 
  * Get platform statistics
  * GET /anchor-nft/stats
  */
-export const getPlatformStats = async (_req: Request, res: Response): Promise<void> => {
+export const getPlatformStats = async (
+  _req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const stats = await AnchorMintingService.getPlatformStats();
 
@@ -525,10 +559,21 @@ export const getPlatformStats = async (_req: Request, res: Response): Promise<vo
 /**
  * Verify NFT ownership
  * GET /anchor-nft/verify-ownership/:mintAddress/:userWalletAddress
- */
-export const verifyOwnership = async (req: Request, res: Response): Promise<void> => {
+ */ export const verifyOwnership = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
-    const { mintAddress, userWalletAddress } = req.params;
+    const rawMintAddress = req.params.mintAddress;
+    const rawUserWalletAddress = req.params.userWalletAddress;
+
+    const mintAddress =
+      typeof rawMintAddress === "string" ? rawMintAddress : rawMintAddress?.[0];
+
+    const userWalletAddress =
+      typeof rawUserWalletAddress === "string"
+        ? rawUserWalletAddress
+        : rawUserWalletAddress?.[0];
 
     if (!mintAddress || !userWalletAddress) {
       res.status(400).json({
@@ -540,7 +585,7 @@ export const verifyOwnership = async (req: Request, res: Response): Promise<void
     try {
       const isOwner = await AnchorTransferService.verifyOwnership(
         mintAddress,
-        userWalletAddress
+        userWalletAddress,
       );
 
       res.status(200).json({
@@ -571,7 +616,10 @@ export const verifyOwnership = async (req: Request, res: Response): Promise<void
  * Health check
  * GET /anchor-nft/health
  */
-export const healthCheck = async (_req: Request, res: Response): Promise<void> => {
+export const healthCheck = async (
+  _req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const anchorService = getAnchorService();
     const platformInfo = await anchorService.getPlatformInfo();
