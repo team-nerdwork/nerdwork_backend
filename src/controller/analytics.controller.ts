@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../config/db";
 import { creatorProfile } from "../model/profile";
 import { getUserJwtFromToken } from "./library.controller";
@@ -8,6 +8,7 @@ import {
   chapterViews,
   comics,
   comicSubscribers,
+  creatorTransactions,
 } from "../model/schema";
 
 export const getCreatorAnalytics = async (req, res) => {
@@ -54,6 +55,19 @@ export const getCreatorAnalytics = async (req, res) => {
       .from(chapterLikes)
       .innerJoin(chapters, eq(chapterLikes.chapterId, chapters.id))
       .where(inArray(chapters.comicId, comicIds));
+
+    // Total Revenue
+    const [{ totalRevenue }] = await db
+      .select({
+        totalRevenue: sql<number>`SUM(${creatorTransactions.nwtAmount})`,
+      })
+      .from(creatorTransactions)
+      .where(
+        and(
+          eq(creatorTransactions.creatorId, creator.id),
+          eq(creatorTransactions.transactionType, "earning"),
+        ),
+      );
 
     // Top Comic
     const topComic = await db
@@ -114,18 +128,36 @@ export const getCreatorAnalytics = async (req, res) => {
       .groupBy(sql`DATE(${comicSubscribers.subscribedAt})`)
       .orderBy(sql`DATE(${comicSubscribers.subscribedAt})`);
 
+    // Revenue Over Time
+    const revenueChart = await db
+      .select({
+        date: sql<string>`DATE(${creatorTransactions.createdAt})`,
+        amount: sql<number>`SUM(${creatorTransactions.nwtAmount})`,
+      })
+      .from(creatorTransactions)
+      .where(
+        and(
+          eq(creatorTransactions.creatorId, creator.id),
+          eq(creatorTransactions.transactionType, "earning"),
+        ),
+      )
+      .groupBy(sql`DATE(${creatorTransactions.createdAt})`)
+      .orderBy(sql`DATE(${creatorTransactions.createdAt}) ASC`);
+
     return res.json({
       success: true,
       summary: {
         totalReads,
         activeReaders,
         totalLikes,
+        totalRevenue: Number(totalRevenue) || 0,
         topComic: topComicData,
       },
       chart: {
         reads: readsChart,
         likes: likesChart,
         subscribers: subscribersChart,
+        revenue: revenueChart,
       },
     });
   } catch (err: any) {
