@@ -51,8 +51,8 @@ export const upload = multer({
     } else {
       cb(
         new Error(
-          "Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed."
-        )
+          "Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.",
+        ),
       );
     }
   },
@@ -69,7 +69,7 @@ const keypair = umi.eddsa.createKeypairFromSecretKey(
     73, 73, 73, 230, 55, 67, 121, 81, 198, 187, 204, 217, 81, 252, 158, 132, 41,
     222, 69, 230, 97, 134, 202, 186, 91, 158, 218, 90, 105, 179, 241, 113, 204,
     215, 39, 54, 158, 233, 66, 129, 141, 95, 31, 203, 109, 193, 83,
-  ])
+  ]),
 );
 
 const masterWallet = createSignerFromKeypair(umi, keypair);
@@ -92,8 +92,8 @@ async function getUserSolanaAddress(userWalletId) {
       and(
         eq(walletAddresses.userWalletId, userWalletId),
         eq(walletAddresses.blockchain, "solana"),
-        eq(walletAddresses.isVerified, true)
-      )
+        eq(walletAddresses.isVerified, true),
+      ),
     );
   return result[0];
 }
@@ -107,8 +107,8 @@ async function getUserPrimarySolanaAddress(userWalletId) {
         eq(walletAddresses.userWalletId, userWalletId),
         eq(walletAddresses.blockchain, "solana"),
         eq(walletAddresses.isPrimary, true),
-        eq(walletAddresses.isVerified, true)
-      )
+        eq(walletAddresses.isVerified, true),
+      ),
     );
   return result[0] || (await getUserSolanaAddress(userWalletId));
 }
@@ -273,21 +273,30 @@ export const mintApiNFT = async (req, res) => {
 
     // Validate price if provided
     if (price !== undefined && (typeof price !== "number" || price < 0)) {
-      return res.status(400).json({ error: "Price must be a non-negative number" });
+      return res
+        .status(400)
+        .json({ error: "Price must be a non-negative number" });
     }
 
     // Validate itemSupply if provided
-    if (itemSupply !== undefined && (typeof itemSupply !== "number" || itemSupply < 1)) {
-      return res.status(400).json({ error: "Item supply must be a positive number" });
+    if (
+      itemSupply !== undefined &&
+      (typeof itemSupply !== "number" || itemSupply < 1)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Item supply must be a positive number" });
     }
 
     // Parse tags if provided
     let parsedTags: string[] = [];
     if (tags) {
       try {
-        parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+        parsedTags = typeof tags === "string" ? JSON.parse(tags) : tags;
         if (!Array.isArray(parsedTags)) {
-          return res.status(400).json({ error: "Tags must be an array of strings" });
+          return res
+            .status(400)
+            .json({ error: "Tags must be an array of strings" });
         }
       } catch (error) {
         return res.status(400).json({ error: "Invalid tags format" });
@@ -400,32 +409,35 @@ export const mintApiNFT = async (req, res) => {
     const isLimited = nftAmount > 1;
 
     // Save NFT to database
-    const [createdNftRecord] = await db.insert(nft).values({
-      owner: userWallet.id, // UUID from the user wallet
-      colection: collectionId ?? "standalone",
-      nftType: "anchor",
-      mintAddress: assetSigner.publicKey.toString(),
-      price: price || 0,
-      isLimitedEdition: isLimited,
-      amount: nftAmount,
-      tags: parsedTags.length > 0 ? parsedTags : null,
-      metadata: {
-        name,
-        description,
-        author,
-        series,
-        issue,
-        genre,
-        pages,
-        publishDate,
-        image: metadataUri, // Use the uploaded URI, not local path
-        uri: metadataUri,
-        assetId: assetSigner.publicKey.toString(),
-        attributes: comicAttributes,
-        mintSignature: createResult.signature,
-      },
-      status: "completed",
-    }).returning();
+    const [createdNftRecord] = await db
+      .insert(nft)
+      .values({
+        owner: userWallet.id, // UUID from the user wallet
+        colection: collectionId ?? "standalone",
+        nftType: "anchor",
+        mintAddress: assetSigner.publicKey.toString(),
+        price: price || 0,
+        isLimitedEdition: isLimited,
+        amount: nftAmount,
+        tags: parsedTags.length > 0 ? parsedTags : null,
+        metadata: {
+          name,
+          description,
+          author,
+          series,
+          issue,
+          genre,
+          pages,
+          publishDate,
+          image: metadataUri, // Use the uploaded URI, not local path
+          uri: metadataUri,
+          assetId: assetSigner.publicKey.toString(),
+          attributes: comicAttributes,
+          mintSignature: createResult.signature,
+        },
+        status: "completed",
+      })
+      .returning();
 
     let transferResult = null;
 
@@ -539,8 +551,8 @@ export const getAssetByOwner = async (req, res) => {
         and(
           eq(walletAddresses.userWalletId, userWallet.id),
           eq(walletAddresses.blockchain, "solana"),
-          eq(walletAddresses.isVerified, true)
-        )
+          eq(walletAddresses.isVerified, true),
+        ),
       );
 
     if (userAddresses.length === 0) {
@@ -554,13 +566,13 @@ export const getAssetByOwner = async (req, res) => {
         const { fetchAssetsByOwner } = require("@metaplex-foundation/mpl-core");
         const assets = await fetchAssetsByOwner(
           umi,
-          publicKey(address.address)
+          publicKey(address.address),
         );
         allAssets.push(...assets);
       } catch (error) {
         console.error(
           `Failed to fetch assets for address ${address.address}:`,
-          error
+          error,
         );
       }
     }

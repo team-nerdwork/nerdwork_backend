@@ -43,7 +43,7 @@ async function initializeNFTServices() {
 function registerRoutes() {
   app.use("/auth", authRoutes);
   app.use("/payment", paymentRoutes);
-  app.use("/nft", authenticate, nftRoutes);
+  app.use("/nft", nftRoutes);
   app.use("/wallet", authenticate, walletRoutes);
   app.use("/profile", profileRoutes);
   app.use("/comics", comicRoutes);
@@ -51,8 +51,8 @@ function registerRoutes() {
   app.use("/file-upload", fileRoutes);
   app.use("/library", libraryRoutes);
   app.use("/transactions", transactionRoutes);
-  app.use("/anchor-nft", nftRouterV2);
-  app.use("/marketplace", marketplaceRoutes);
+  // app.use("/anchor-nft", nftRouterV2);
+  // app.use("/marketplace", marketplaceRoutes);
   app.use("/notifications", notificationRoutes);
   app.use("/mobile", mobileComicsRoutes);
   app.use("/analytics", analyticsRoutes);
