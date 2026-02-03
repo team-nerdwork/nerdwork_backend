@@ -15,115 +15,138 @@ import {
 import { upload } from "../controller/nft.controller";
 
 const router = Router();
-
-// We define the tag once here for the UI, but we'll use it in each route
 /**
  * @swagger
  * tags:
- * - name: NFT Marketplace
- * description: Comic NFT creation, trading, and portfolio management
+ *   - name: NFT Marketplace
+ *     description: Comic NFT creation, trading, and portfolio management
  */
 
 /**
  * @swagger
  * /nft/mint:
- * post:
- * summary: Create (Mint) a new Comic NFT
- * tags: [NFT Marketplace]
- * responses:
- * 200:
- * description: Success
+ *   post:
+ *     summary: Create (Mint) a new Comic NFT
+ *     description: Uploads a comic image and creates a unique NFT on the blockchain.
+ *     tags: [NFT Marketplace]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: NFT Minted successfully
+ *       500:
+ *         description: Internal server error
  */
 router.post("/mint", upload.single("image"), mintNftWithImage);
 
 /**
  * @swagger
  * /nft/market/explore:
- * get:
- * summary: Get all active comic listings
- * tags: [NFT Marketplace]
- * responses:
- * 200:
- * description: Success
+ *   get:
+ *     summary: Get all active comic listings
+ *     description: Returns a list of all comics currently available for purchase in the shop.
+ *     tags: [NFT Marketplace]
+ *     responses:
+ *       200:
+ *         description: List of active listings
+ *       500:
+ *         description: Internal server error
  */
 router.get("/market/explore", getListings);
 
 /**
  * @swagger
  * /nft/market/list:
- * post:
- * summary: List an NFT for sale
- * tags: [NFT Marketplace]
- * responses:
- * 200:
- * description: Success
+ *   post:
+ *     summary: List an NFT for sale
+ *     tags: [NFT Marketplace]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - nftId
+ *               - price
+ *             properties:
+ *               nftId:
+ *                 type: string
+ *               price:
+ *                 type: number
+ *     responses:
+ *       201:
+ *         description: NFT listed for sale
+ *       400:
+ *         description: Invalid input
  */
 router.post("/market/list", listNft);
 
 /**
  * @swagger
  * /nft/market/buy:
- * post:
- * summary: Purchase a comic
- * tags: [NFT Marketplace]
- * responses:
- * 200:
- * description: Success
+ *   post:
+ *     summary: Purchase a comic NFT
+ *     tags: [NFT Marketplace]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               listingId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Purchase successful
  */
 router.post("/market/buy", buyNft);
 
 /**
  * @swagger
- * /nft/market/cancel/{id}:
- * delete:
- * summary: Remove listing from market
- * tags: [NFT Marketplace]
- * parameters:
- * - in: path
- * name: id
- * required: true
- * schema:
- * type: string
- * responses:
- * 200:
- * description: Success
- */
-router.delete("/market/cancel/:id", delistNft);
-
-/**
- * @swagger
  * /nft/portfolio/{walletAddress}:
- * get:
- * summary: Get User Inventory
- * tags: [NFT Marketplace]
- * parameters:
- * - in: path
- * name: walletAddress
- * required: true
- * schema:
- * type: string
- * responses:
- * 200:
- * description: Success
+ *   get:
+ *     summary: Get user's NFT collection
+ *     tags: [NFT Marketplace]
+ *     parameters:
+ *       - in: path
+ *         name: walletAddress
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of NFTs owned by the user
  */
 router.get("/portfolio/:walletAddress", getUserNfts);
 
 /**
  * @swagger
  * /nft/details/{mintAddress}:
- * get:
- * summary: Get Comic Details
- * tags: [NFT Marketplace]
- * parameters:
- * - in: path
- * name: mintAddress
- * required: true
- * schema:
- * type: string
- * responses:
- * 200:
- * description: Success
+ *   get:
+ *     summary: Get NFT metadata details
+ *     tags: [NFT Marketplace]
+ *     parameters:
+ *       - in: path
+ *         name: mintAddress
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Metadata retrieved
  */
 router.get("/details/:mintAddress", getNftDetails);
-
-export default router;
