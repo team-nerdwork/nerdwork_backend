@@ -15,6 +15,7 @@ import {
 import { upload } from "../controller/nft.controller";
 
 const router = Router();
+
 /**
  * @swagger
  * tags:
@@ -150,3 +151,5 @@ router.get("/portfolio/:walletAddress", getUserNfts);
  *         description: Metadata retrieved
  */
 router.get("/details/:mintAddress", getNftDetails);
+
+export default router;
