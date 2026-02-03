@@ -19,8 +19,8 @@ const router = Router();
 /**
  * @swagger
  * tags:
- * name: NFT Marketplace
- * description: Comic NFT creation, trading, and portfolio management
+ *   name: NFT Marketplace
+ *   description: Comic NFT creation, trading, and portfolio management
  */
 
 // ==========================================
