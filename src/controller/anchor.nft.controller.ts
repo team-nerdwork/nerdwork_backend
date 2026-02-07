@@ -54,79 +54,45 @@ export const mintNftWithImage = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
-  console.log("hello");
   try {
-    if (!req.file) {
-      res.status(400).json({ error: "Image file is required" });
-      return;
-    }
-
     const {
       userProfileId,
       userWalletAddress,
-      nftName,
-      description,
-      author,
-      series,
-      issue,
-      genre,
-      pages,
-      publishDate,
-      attributes,
+      name, // Frontend UI field
+      description, // Frontend UI field
+      image, // The string provided by your upload logic
+      supply, // From UI "Supply" section
+      price, // From UI "Price" section
+      properties, // From UI "Properties" section (Array of {type, name})
+      tags, // From UI "Tags" section (Array of strings)
     } = req.body;
 
-    // Validate required fields
-    if (!userProfileId || !userWalletAddress || !nftName) {
-      if (fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
+    // Validate required fields based on the new UI
+    if (!userProfileId || !userWalletAddress || !name || !image) {
       res.status(400).json({
-        error: "userProfileId, userWalletAddress, and nftName are required",
+        error:
+          "userProfileId, userWalletAddress, name, and image string are required",
       });
       return;
     }
 
-    // Upload image to Pinata IPFS
-    let imageUri: string;
-    try {
-      imageUri = await PinataService.uploadImageFile(
-        req.file.path,
-        `${nftName}-${Date.now()}`,
-      );
-    } catch (ipfsError) {
-      console.error("IPFS upload error:", ipfsError);
-      if (fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-      res.status(500).json({
-        error: "Failed to upload image to IPFS",
-        details: (ipfsError as any).message,
-      });
-      return;
-    }
-
-    // Create metadata and upload to Pinata
+    // Create metadata for IPFS (This still needs to be stored so the NFT has a URI)
     const metadata = {
-      name: nftName,
+      name: name,
       description: description || "",
-      author: author || "",
-      series: series || "",
-      issue: parseInt(issue) || 1,
-      genre: genre || "",
-      pages: parseInt(pages) || 1,
-      publishDate: publishDate || new Date().toISOString(),
-      image: imageUri,
-      attributes: attributes ? JSON.parse(attributes) : [],
+      image: image, // Using the string passed from frontend
+      attributes: properties || [], // Mapping UI "Properties" to NFT attributes
+      external_tags: tags || [],
+      price: price || 0,
+      supply: supply || 1,
     };
 
     let metadataUri: string;
     try {
+      // We still upload the JSON metadata to Pinata so the NFT has a permanent home
       metadataUri = await PinataService.uploadMetadataJson(metadata);
     } catch (ipfsError) {
       console.error("Metadata IPFS upload error:", ipfsError);
-      if (fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
       res.status(500).json({
         error: "Failed to upload metadata to IPFS",
         details: (ipfsError as any).message,
@@ -138,25 +104,15 @@ export const mintNftWithImage = async (
     const mintRequest: MintNftRequest = {
       userProfileId,
       userWalletAddress,
-      nftName,
+      nftName: name,
       nftUri: metadataUri,
       description,
-      author,
-      series,
-      issue: parseInt(issue),
-      genre,
-      pages: parseInt(pages),
-      publishDate,
+      // Pass other fields as required by your Anchor service
       attributes: metadata.attributes,
     };
 
     try {
       const result = await AnchorMintingService.mintNft(mintRequest);
-
-      // Clean up uploaded file
-      if (fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
 
       res.status(200).json({
         success: true,
@@ -164,7 +120,7 @@ export const mintNftWithImage = async (
           mintAddress: result.mintAddress,
           nftInfoPda: result.nftInfoPda,
           signature: result.signature,
-          imageUri: imageUri,
+          imageUri: image,
           metadataUri: metadataUri,
           nft: result.nftData,
         },
@@ -172,9 +128,6 @@ export const mintNftWithImage = async (
       });
     } catch (chainError) {
       console.error("Minting error:", chainError);
-      if (fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
       res.status(500).json({
         error: "Failed to mint NFT",
         details: (chainError as any).message,
@@ -182,9 +135,6 @@ export const mintNftWithImage = async (
     }
   } catch (error) {
     console.error("Mint endpoint error:", error);
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
     res.status(500).json({
       error: "Internal server error",
       details: (error as any).message,

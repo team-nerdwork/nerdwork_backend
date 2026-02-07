@@ -28,21 +28,42 @@ const router = Router();
  * /nft/mint:
  *   post:
  *     summary: Create (Mint) a new Comic NFT
- *     description: Uploads a comic image and creates a unique NFT on the blockchain.
+ *     description: Creates a unique NFT on the blockchain using an image URL string.
  *     tags: [NFT Marketplace]
  *     requestBody:
  *       required: true
  *       content:
- *         multipart/form-data:
+ *         application/json:
  *           schema:
  *             type: object
  *             properties:
  *               image:
  *                 type: string
- *                 format: binary
+ *                 description: The URL string returned from the image upload logic
  *               name:
  *                 type: string
  *               description:
+ *                 type: string
+ *               supply:
+ *                 type: integer
+ *               price:
+ *                 type: string
+ *               attributes:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     type:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               userProfileId:
+ *                 type: string
+ *               userWalletAddress:
  *                 type: string
  *     responses:
  *       201:
@@ -50,7 +71,7 @@ const router = Router();
  *       500:
  *         description: Internal server error
  */
-router.post("/mint", upload.single("image"), mintNftWithImage);
+router.post("/mint", mintNftWithImage);
 
 /**
  * @swagger
