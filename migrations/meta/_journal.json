@@ -15,6 +15,13 @@
       "when": 1768312230756,
       "tag": "0001_living_boom_boom",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770909195365,
+      "tag": "0002_conscious_paladin",
+      "breakpoints": true
     }
   ]
 }
