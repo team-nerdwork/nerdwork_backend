@@ -457,6 +457,7 @@ export async function listComics({ query, status, page, pageSize }) {
     .select({
       id: comics.id,
       title: comics.title,
+      slug: comics.slug,
       creatorId: creatorProfile.id,
       creatorName: creatorProfile.creatorName,
       comicStatus: comics.comicStatus,
@@ -503,6 +504,7 @@ export async function listComics({ query, status, page, pageSize }) {
   const data = rows.map((row) => ({
     id: row.id,
     title: row.title,
+    slug: row.slug,
     creator: row.creatorName,
     status: row.comicStatus,
     submitted: row.createdAt,
