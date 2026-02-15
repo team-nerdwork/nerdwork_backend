@@ -1,4 +1,4 @@
-import { globalErrorHandler, globalNotFoundHandler } from "./middleware/common";
+﻿import { globalErrorHandler, globalNotFoundHandler } from "./middleware/common";
 import type { Request, Response } from "express";
 import { app } from "./server";
 import authRoutes from "./routes/auth.routes";
@@ -17,6 +17,7 @@ import transactionRoutes from "./routes/transaction.routes";
 import notificationRoutes from "./routes/notification.routes";
 import mobileComicsRoutes from "./routes/mobile.comics.routes";
 import analyticsRoutes from "./routes/analytics.routes";
+import adminRoutes from "./routes/admin.routes";
 import { AnchorConfig } from "./config/anchor.config";
 
 const PORT = 5000;
@@ -26,13 +27,13 @@ const PORT = 5000;
  */
 async function initializeNFTServices() {
   try {
-    console.log("📍 Initializing NFT services...");
+    console.log("ðŸ“ Initializing NFT services...");
     await AnchorConfig.initializeAll();
-    console.log("✓ NFT services initialized successfully");
+    console.log("âœ“ NFT services initialized successfully");
     return true;
   } catch (error) {
-    console.error("✗ Failed to initialize NFT services:", error);
-    console.warn("⚠ Continuing without NFT services. Some endpoints may fail.");
+    console.error("âœ— Failed to initialize NFT services:", error);
+    console.warn("âš  Continuing without NFT services. Some endpoints may fail.");
     return false;
   }
 }
@@ -56,6 +57,7 @@ function registerRoutes() {
   app.use("/notifications", notificationRoutes);
   app.use("/mobile", mobileComicsRoutes);
   app.use("/analytics", analyticsRoutes);
+  app.use("/admin", adminRoutes);
 }
 
 /**
@@ -82,17 +84,17 @@ async function startServer() {
 
     // Start listening
     app.listen(PORT, () => {
-      console.log(`\n🚀 Server running at http://localhost:${PORT}`);
+      console.log(`\nðŸš€ Server running at http://localhost:${PORT}`);
       console.log(
-        `📚 Swagger docs available at http://localhost:${PORT}/api-docs`,
+        `ðŸ“š Swagger docs available at http://localhost:${PORT}/api-docs`,
       );
       console.log(`\nAvailable endpoints:`);
-      console.log(`  • NFT Minting: /api/anchor-nft`);
-      console.log(`  • Marketplace: /api/marketplace`);
-      console.log(`\n✓ Ready to accept requests\n`);
+      console.log(`  â€¢ NFT Minting: /api/anchor-nft`);
+      console.log(`  â€¢ Marketplace: /api/marketplace`);
+      console.log(`\nâœ“ Ready to accept requests\n`);
     });
   } catch (error) {
-    console.error("❌ Failed to start server:", error);
+    console.error("âŒ Failed to start server:", error);
     process.exit(1);
   }
 }
