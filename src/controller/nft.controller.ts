@@ -1,675 +1,847 @@
-import * as fs from "fs";
-
-import { eq, and } from "drizzle-orm";
-import {
-  mplCore,
-  create,
-  createCollection,
-  fetchCollection,
-  fetchAsset,
-  fetchAssetsByOwner,
-  transfer,
-  transferV1,
-} from "@metaplex-foundation/mpl-core";
-import {
-  createSignerFromKeypair,
-  signerIdentity,
-  generateSigner,
-  publicKey,
-} from "@metaplex-foundation/umi";
-import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
-import { createUmi as createTestUmi } from "@metaplex-foundation/umi-bundle-tests";
-
-// import * as multer from "multer"
-import { userWallets, walletAddresses } from "../model/schema";
+import { Request, Response } from "express";
+import { pinFileToPinataByKey, pinJsonToPinata } from "../services/nft.service";
 import { db } from "../config/db";
-import { memoryStorage } from "multer";
-import multer from "multer";
-import { irysUploader } from "@metaplex-foundation/umi-uploader-irys";
-import { nft } from "../model/nft";
+import { nfts } from "../model/nft/nft.schema";
+import {
+  creatorProfile,
+  nftListings,
+  nftOrders,
+  nftOwnershipHistory,
+  nftOwnerships,
+  readerProfile,
+} from "../model/schema";
+import { getUserJwtFromToken } from "./library.controller";
+import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { generateFileUrl } from "./file.controller";
 
-const umi = createUmi("http://api.devnet.solana.com")
-  .use(mplCore())
-  .use(irysUploader());
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/");
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
-});
-
-export const upload = multer({
-  storage: storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(
-        new Error(
-          "Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.",
-        ),
-      );
-    }
-  },
-});
-
-if (!fs.existsSync("uploads")) {
-  fs.mkdirSync("uploads");
-}
-
-// Set up signer from private key
-const keypair = umi.eddsa.createKeypairFromSecretKey(
-  new Uint8Array([
-    52, 52, 212, 166, 63, 87, 120, 139, 26, 57, 91, 117, 243, 1, 251, 111, 227,
-    73, 73, 73, 230, 55, 67, 121, 81, 198, 187, 204, 217, 81, 252, 158, 132, 41,
-    222, 69, 230, 97, 134, 202, 186, 91, 158, 218, 90, 105, 179, 241, 113, 204,
-    215, 39, 54, 158, 233, 66, 129, 141, 95, 31, 203, 109, 193, 83,
-  ]),
-);
-
-const masterWallet = createSignerFromKeypair(umi, keypair);
-umi.use(signerIdentity(masterWallet));
-
-// Database helper functions
-async function getUserWalletByUserId(userProfileId) {
-  const result = await db
-    .select()
-    .from(userWallets)
-    .where(eq(userWallets.userProfileId, userProfileId));
-  return result[0];
-}
-
-async function getUserSolanaAddress(userWalletId) {
-  const result = await db
-    .select()
-    .from(walletAddresses)
-    .where(
-      and(
-        eq(walletAddresses.userWalletId, userWalletId),
-        eq(walletAddresses.blockchain, "solana"),
-        eq(walletAddresses.isVerified, true),
-      ),
-    );
-  return result[0];
-}
-
-async function getUserPrimarySolanaAddress(userWalletId) {
-  const result = await db
-    .select()
-    .from(walletAddresses)
-    .where(
-      and(
-        eq(walletAddresses.userWalletId, userWalletId),
-        eq(walletAddresses.blockchain, "solana"),
-        eq(walletAddresses.isPrimary, true),
-        eq(walletAddresses.isVerified, true),
-      ),
-    );
-  return result[0] || (await getUserSolanaAddress(userWalletId));
-}
-
-// Helper function to upload metadata
-async function uploadMetadata(imageFile, metadata) {
+// Mint NFT
+export const mintNft = async (req: Request, res: Response) => {
   try {
-    // Upload image first
-    const imageBuffer = fs.readFileSync(imageFile.path);
-    const genericFile = {
-      buffer: imageBuffer,
-      fileName: imageFile.originalname || imageFile.filename || "image",
-      displayName: imageFile.originalname || imageFile.filename || "image",
-      uniqueName:
-        Date.now() +
-        "-" +
-        (imageFile.originalname || imageFile.filename || "image"),
-      contentType: imageFile.mimetype || "image/png",
-      extension:
-        (imageFile.originalname || imageFile.filename || "image")
-          .split(".")
-          .pop() || "png",
-      tags: [],
-    };
-    const [imageUri] = await umi.uploader.upload([genericFile]);
+    const user = getUserJwtFromToken(req);
 
-    // Create metadata JSON
-    const metadataJson = {
-      name: metadata.name,
-      description: metadata.description,
-      image: imageUri,
-      attributes: metadata.attributes || [],
-      properties: {
-        category: "image",
-        creators: metadata.creators || [],
-        ...metadata.properties,
-      },
-      // Comic-specific metadata
-      comic: {
-        issue: metadata.issue || 1,
-        series: metadata.series || "",
-        author: metadata.author || "",
-        genre: metadata.genre || "",
-        publishDate: metadata.publishDate || new Date().toISOString(),
-        pages: metadata.pages || 1,
-      },
-    };
-
-    // Upload metadata JSON
-    const metadataUri = await umi.uploader.uploadJson(metadataJson);
-
-    // Clean up uploaded file
-    fs.unlinkSync(imageFile.path);
-
-    return metadataUri;
-  } catch (error) {
-    // Clean up file on error
-    if (fs.existsSync(imageFile.path)) {
-      fs.unlinkSync(imageFile.path);
-    }
-    throw error;
-  }
-}
-
-// API Roter
-
-// Create a new collection
-export const createApiCollection = async (req, res) => {
-  try {
-    const { name, description, image, userProfileId } = req.body;
-
-    if (!name || !description || !image) {
-      return res
-        .status(400)
-        .json({ error: "Name, description, and image URL are required" });
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized",
+      });
     }
 
-    const metadataJson = {
-      name,
-      description,
-      image,
-      attributes: [],
-      properties: {
-        category: "image",
-        creators: [
-          {
-            address: masterWallet.publicKey,
-            percentage: 100,
-          },
-        ],
-      },
-    };
-    type SolAmount = {
-      basisPoints: bigint;
-      identifier: "SOL";
-      decimals: 9;
-    };
-    const amount: SolAmount = {
-      basisPoints: BigInt(9),
-      identifier: "SOL",
-      decimals: 9,
-    };
-    console.log(await umi.rpc.airdrop(masterWallet.publicKey, amount));
+    const [creator] = await db
+      .select()
+      .from(creatorProfile)
+      .where(eq(creatorProfile.userId, user));
 
-    const metadataUri = await umi.uploader.uploadJson(metadataJson);
-    console.log(metadataUri);
-    const collectionSigner = generateSigner(umi);
-
-    await createCollection(umi, {
-      collection: collectionSigner,
-      name,
-      uri: metadataUri,
-    }).sendAndConfirm(umi);
-
-    // add crea
-
-    res.json({
-      success: true,
-      collectionId: collectionSigner.publicKey,
-      message: "Collection created successfully",
-    });
-  } catch (error) {
-    console.error("Collection creation error:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to create collection", details: error.message });
-  }
-};
-
-let defaultCollection;
-
-export const mintApiNFT = async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "Image file is required" });
+    if (!creator) {
+      return res.status(403).json({
+        success: false,
+        error: "Only creators can mint NFTs",
+      });
     }
 
     const {
-      userProfileId,
       name,
       description,
-      author,
-      series,
-      issue,
-      genre,
-      pages,
-      publishDate,
-      collectionId,
-      attributes,
-      price,
-      itemSupply,
+      imageKey,
+      supply,
+      royaltyBps,
       tags,
-      transferImmediately = true,
+      properties,
     } = req.body;
 
-    // Validate required fields
-    if (!userProfileId || !name || !description) {
-      return res
-        .status(400)
-        .json({ error: "userProfileId, name, and description are required" });
+    if (!name || !imageKey || !supply) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields",
+      });
     }
 
-    // Validate price if provided
-    if (price !== undefined && (typeof price !== "number" || price < 0)) {
-      return res
-        .status(400)
-        .json({ error: "Price must be a non-negative number" });
-    }
+    const parsedTags = tags ? JSON.parse(tags) : [];
+    const parsedProperties = properties ? JSON.parse(properties) : [];
 
-    // Validate itemSupply if provided
-    if (
-      itemSupply !== undefined &&
-      (typeof itemSupply !== "number" || itemSupply < 1)
-    ) {
-      return res
-        .status(400)
-        .json({ error: "Item supply must be a positive number" });
-    }
-
-    // Parse tags if provided
-    let parsedTags: string[] = [];
-    if (tags) {
-      try {
-        parsedTags = typeof tags === "string" ? JSON.parse(tags) : tags;
-        if (!Array.isArray(parsedTags)) {
-          return res
-            .status(400)
-            .json({ error: "Tags must be an array of strings" });
-        }
-      } catch (error) {
-        return res.status(400).json({ error: "Invalid tags format" });
-      }
-    }
-
-    // Get user's wallet from database
-    const userWallet = await getUserWalletByUserId(userProfileId);
-    if (!userWallet) {
-      return res.status(404).json({ error: "User wallet not found" });
-    }
-
-    // Get user's primary Solana address
-    const userSolanaWallet = await getUserPrimarySolanaAddress(userWallet.id);
-    if (!userSolanaWallet) {
-      return res
-        .status(404)
-        .json({ error: "User has no verified Solana wallet address" });
-    }
-
-    // console.log(`Minting NFT for user ${userProfileId} to address ${userSolanaWallet.address}`);
-
-    // Parse attributes if provided
-    let parsedAttributes = [];
-    if (attributes) {
-      try {
-        parsedAttributes = JSON.parse(attributes);
-      } catch (error) {
-        return res.status(400).json({ error: "Invalid attributes format" });
-      }
-    }
-
-    // Add comic-specific attributes
-    const comicAttributes = [
-      { trait_type: "Author", value: author || "Unknown" },
-      { trait_type: "Series", value: series || "Standalone" },
-      { trait_type: "Issue", value: issue || "1" },
-      { trait_type: "Genre", value: genre || "Comic" },
-      { trait_type: "Pages", value: pages || "1" },
-      { trait_type: "Platform", value: "YourPlatformName" },
-      { trait_type: "Minted By", value: "Platform" },
-      ...parsedAttributes,
-    ];
-
-    // Prepare metadata
-    const metadata = {
-      name,
-      description,
-      author,
-      series,
-      issue,
-      genre,
-      pages,
-      publishDate,
-      attributes: comicAttributes,
-      creators: [
-        {
-          address: masterWallet.publicKey,
-          percentage: 100,
-        },
-      ],
-    };
-
-    // Upload metadata
-    const metadataUri = await uploadMetadata(req.file, metadata);
-
-    // Generate asset signer
-    const assetSigner = generateSigner(umi);
-
-    // Prepare mint parameters (initially mint to master wallet)
-    const mintParams = {
-      asset: assetSigner,
-      name,
-      uri: metadataUri,
-      owner: masterWallet.publicKey, // Mint to master wallet first
-    };
-
-    // Add collection if specified
-    if (collectionId) {
-      try {
-        const collection = await fetchCollection(umi, publicKey(collectionId));
-        mintParams["collection"] = collection;
-      } catch (error) {
-        console.log("Collection not found, minting without collection");
-      }
-    }
-    // const userPublicKey = publicKey(userSolanaWallet.address)
-
-    // Add royalties plugin (platform gets royalties)
-    mintParams["plugins"] = [
-      {
-        type: "Royalties",
-        basisPoints: 500, // 5% royalty to platform
-        creators: [
-          {
-            address: masterWallet.publicKey,
-            percentage: 100,
-          },
-        ],
-        ruleSet: { type: "None" },
-      },
-    ];
-
-    // Create the asset
-    console.log("Creating NFT...");
-    const createResult = await create(umi, mintParams).sendAndConfirm(umi);
-
-    // Determine if limited edition based on itemSupply
-    const nftAmount = itemSupply || 1;
-    const isLimited = nftAmount > 1;
-
-    // Save NFT to database
-    const [createdNftRecord] = await db
-      .insert(nft)
-      .values({
-        owner: userWallet.id, // UUID from the user wallet
-        colection: collectionId ?? "standalone",
-        nftType: "anchor",
-        mintAddress: assetSigner.publicKey.toString(),
-        price: price || 0,
-        isLimitedEdition: isLimited,
-        amount: nftAmount,
-        tags: parsedTags.length > 0 ? parsedTags : null,
-        metadata: {
-          name,
+    const result = await db.transaction(async (tx) => {
+      // 1️⃣ Create NFT in draft
+      const [draftNft] = await tx
+        .insert(nfts)
+        .values({
+          title: name,
           description,
-          author,
-          series,
-          issue,
-          genre,
-          pages,
-          publishDate,
-          image: metadataUri, // Use the uploaded URI, not local path
-          uri: metadataUri,
-          assetId: assetSigner.publicKey.toString(),
-          attributes: comicAttributes,
-          mintSignature: createResult.signature,
+          imageKey,
+          creatorId: creator.id,
+          ownerCreatorId: creator.id,
+          supply: Number(supply),
+          remainingSupply: Number(supply),
+          royaltyBps: royaltyBps ?? 500,
+          metadata: {
+            tags: parsedTags,
+            properties: parsedProperties,
+          },
+          status: "draft",
+        })
+        .returning();
+
+      // 2️⃣ Pin image → imageCID
+      const imageCID = await pinFileToPinataByKey(imageKey);
+
+      // 3️⃣ Build metadata JSON (IPFS standard)
+      const metadataJson = {
+        name,
+        description,
+        image: `ipfs://${imageCID}`,
+        attributes: parsedProperties,
+        properties: {
+          files: [
+            {
+              uri: `ipfs://${imageCID}`,
+              type: "image/png",
+            },
+          ],
         },
-        status: "completed",
-      })
-      .returning();
+      };
 
-    let transferResult = null;
+      // 4️⃣ Upload metadata JSON → metadataCID
+      const metadataCID = await pinJsonToPinata(metadataJson);
 
-    // Transfer to user immediately if requested
-    // if (transferImmediately) {
-    //   console.log('Transferring NFT to user...');
-    //   try {
-    //    if (collectionId){
-    //      transferResult = await transferV1(umi, {
-    //       asset: assetSigner.publicKey,
-    //       newOwner: publicKey(userSolanaWallet.address),
-    //     }).sendAndConfirm(umi);
-    //    }else{
-    //      transferResult = await transferV1(umi, {
-    //       asset: assetSigner.publicKey,
-    //       newOwner: publicKey(userSolanaWallet.address),
-    //       collection: collectionId
-    //     }).sendAndConfirm(umi);
-    //    }
-    //   } catch (transferError) {
-    //     console.error('Transfer failed:', transferError);
-    //     // NFT was minted but transfer failed - you might want to handle this differently
-    //     return res.status(500).json({
-    //       error: 'NFT minted but transfer failed',
-    //       details: transferError.message,
-    //       assetId: assetSigner.publicKey,
-    //       mintSignature: createResult.signature,
-    //       metadataUri
-    //     });
-    //   }
-    // }
+      const tokenURI = `ipfs://${metadataCID}`;
 
-    // Log the transaction for your records
-    console.log(`NFT minted successfully:
-      Asset ID: ${assetSigner.publicKey}
-      User: ${userProfileId}
-      User Wallet: ${userSolanaWallet}
-      Mint Signature: ${createResult.signature}
-      Transfer Signature: ${transferResult?.signature || "N/A"}
-    `);
+      // 5️⃣ Freeze NFT
+      const [frozenNft] = await tx
+        .update(nfts)
+        .set({
+          imageCID,
+          metadataCID,
+          tokenURI,
+          status: "frozen",
+          updatedAt: new Date(),
+        })
+        .where(eq(nfts.id, draftNft.id))
+        .returning();
 
-    res.json({
-      success: true,
-      assetId: assetSigner.publicKey,
-      mintSignature: createResult.signature,
-      transferSignature: transferResult?.signature,
-      metadataUri,
-      // userWalletAddress: userSolanaWallet.address,
-      transferred: transferImmediately,
-      message: transferImmediately
-        ? "Comic NFT minted and transferred to user successfully"
-        : "Comic NFT minted successfully (transfer pending)",
+      return frozenNft;
     });
-  } catch (error) {
-    console.error("Minting error:", error);
 
-    // Clean up uploaded file on error
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
+    return res.status(201).json({
+      success: true,
+      data: result,
+      message: "NFT minted and frozen successfully",
+    });
+  } catch (error: any) {
+    console.error("Mint NFT error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
+      success: false,
       error: "Failed to mint NFT",
-      details: error.message,
     });
   }
 };
 
-// Get NFT details
-export const getAssetData = async (req, res) => {
+// Get My Minted NFTs (Creators only)
+export const getMyMintedNfts = async (req: Request, res: Response) => {
   try {
-    const { assetId } = req.params;
+    const user = getUserJwtFromToken(req);
 
-    const asset = await fetchAsset(umi, publicKey(assetId));
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized",
+      });
+    }
 
-    res.json({
+    const [creator] = await db
+      .select()
+      .from(creatorProfile)
+      .where(eq(creatorProfile.userId, user));
+
+    if (!creator) {
+      return res.status(403).json({
+        success: false,
+        error: "Only creators can access this resource",
+      });
+    }
+
+    const mintedNfts = await db
+      .select()
+      .from(nfts)
+      .where(eq(nfts.creatorId, creator.id))
+      .orderBy(desc(nfts.createdAt));
+
+    const response = mintedNfts.map((nft) => ({
+      id: nft.id,
+      title: nft.title,
+      description: nft.description,
+
+      // Media
+      imageUrl: generateFileUrl(nft.imageKey),
+      imageCID: nft.imageCID,
+      metadataCID: nft.metadataCID,
+      tokenURI: nft.tokenURI,
+
+      // Supply
+      supply: nft.supply,
+      remainingSupply: nft.remainingSupply,
+
+      // Royalty
+      royaltyBps: nft.royaltyBps,
+
+      // Lifecycle
+      status: nft.status,
+
+      createdAt: nft.createdAt,
+      updatedAt: nft.updatedAt,
+    }));
+
+    return res.status(200).json({
       success: true,
-      asset: {
-        id: asset.publicKey,
-        name: asset.name,
-        uri: asset.uri,
-        owner: asset.owner,
-        updateAuthority: asset.updateAuthority,
-        plugins: asset["plugins"] || null,
+      data: response,
+    });
+  } catch (error) {
+    console.error("Fetch minted NFTs error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch NFTs",
+    });
+  }
+};
+
+// Get Nft Details for Creator (only if they are the owner)
+export const getSingleCreatorNft = async (req: Request, res: Response) => {
+  try {
+    const user = getUserJwtFromToken(req);
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized",
+      });
+    }
+
+    const id = req.params.id as string;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: "NFT id is required",
+      });
+    }
+
+    // Get creator profile
+    const [creator] = await db
+      .select()
+      .from(creatorProfile)
+      .where(eq(creatorProfile.userId, user));
+
+    if (!creator) {
+      return res.status(403).json({
+        success: false,
+        error: "Only creators can access this resource",
+      });
+    }
+
+    // Fetch NFT
+    const [nft] = await db
+      .select()
+      .from(nfts)
+      .where(and(eq(nfts.id, id), eq(nfts.creatorId, creator.id)));
+
+    if (!nft) {
+      return res.status(404).json({
+        success: false,
+        error: "NFT not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: nft.id,
+        title: nft.title,
+        description: nft.description,
+
+        imageUrl: generateFileUrl(nft.imageKey),
+        imageCID: nft.imageCID,
+        metadataCID: nft.metadataCID,
+        tokenURI: nft.tokenURI,
+        metadata: nft.metadata,
+
+        supply: nft.supply,
+        remainingSupply: nft.remainingSupply,
+        royaltyBps: nft.royaltyBps,
+
+        status: nft.status,
+        createdAt: nft.createdAt,
+        updatedAt: nft.updatedAt,
       },
     });
   } catch (error) {
-    console.error("Fetch error:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch NFT", details: error.message });
+    console.error("Get single creator NFT error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch NFT",
+    });
   }
 };
 
-// Get NFTs by owner
-export const getAssetByOwner = async (req, res) => {
+// List NFT for sale
+export const listNftForSale = async (req: Request, res: Response) => {
   try {
-    const { userProfileId } = req.params;
+    const user = getUserJwtFromToken(req);
 
-    // Get user's wallet from database
-    const userWallet = await getUserWalletByUserId(userProfileId);
-    if (!userWallet) {
-      return res.status(404).json({ error: "User wallet not found" });
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized",
+      });
     }
 
-    // Get all user's Solana addresses
-    const userAddresses = await db
+    const [creator] = await db
       .select()
-      .from(walletAddresses)
+      .from(creatorProfile)
+      .where(eq(creatorProfile.userId, user));
+
+    if (!creator) {
+      return res.status(403).json({
+        success: false,
+        error: "Only creators can list NFTs",
+      });
+    }
+
+    const { nftId, price } = req.body;
+
+    if (!nftId || !price) {
+      return res.status(400).json({
+        success: false,
+        error: "nftId and price are required",
+      });
+    }
+
+    if (Number(price) <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Price must be greater than zero",
+      });
+    }
+
+    const result = await db.transaction(async (tx) => {
+      // 1️⃣ Fetch NFT
+      const [nft] = await tx.select().from(nfts).where(eq(nfts.id, nftId));
+
+      if (!nft) {
+        throw new Error("NFT not found");
+      }
+
+      // 2️⃣ Ownership check
+      if (nft.ownerCreatorId !== creator.id) {
+        throw new Error("You do not own this NFT");
+      }
+
+      // 3️⃣ Must be frozen
+      if (nft.status !== "frozen") {
+        throw new Error("NFT must be frozen before it can be listed");
+      }
+
+      // 4️⃣ Supply check
+      if (nft.remainingSupply <= 0) {
+        throw new Error("NFT is sold out");
+      }
+
+      // 5️⃣ Ensure not already listed
+      const existingListing = await tx
+        .select()
+        .from(nftListings)
+        .where(eq(nftListings.nftId, nftId));
+
+      if (existingListing.length > 0) {
+        throw new Error("NFT is already listed");
+      }
+
+      // 6️⃣ Create listing
+      const [listing] = await tx
+        .insert(nftListings)
+        .values({
+          nftId,
+          sellerId: creator.id,
+          price,
+        })
+        .returning();
+
+      // 7️⃣ Update NFT status
+      await tx
+        .update(nfts)
+        .set({
+          status: "listed",
+          updatedAt: new Date(),
+        })
+        .where(eq(nfts.id, nftId));
+
+      return listing;
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: result,
+      message: "NFT listed successfully",
+    });
+  } catch (error: any) {
+    console.error("List NFT error:", error.message);
+
+    return res.status(400).json({
+      success: false,
+      error: error.message || "Failed to list NFT",
+    });
+  }
+};
+
+// Get Marketplace NFTs
+export const getAllAvailableNfts = async (req: Request, res: Response) => {
+  try {
+    const listings = await db
+      .select({
+        listingId: nftListings.id,
+        nftId: nfts.id,
+        title: nfts.title,
+        description: nfts.description,
+        imageKey: nfts.imageKey,
+        price: nftListings.price,
+        remainingSupply: nfts.remainingSupply,
+        royaltyBps: nfts.royaltyBps,
+        creatorName: creatorProfile.creatorName,
+      })
+      .from(nftListings)
+      .innerJoin(nfts, eq(nftListings.nftId, nfts.id))
+      .innerJoin(creatorProfile, eq(nftListings.sellerId, creatorProfile.id))
       .where(
         and(
-          eq(walletAddresses.userWalletId, userWallet.id),
-          eq(walletAddresses.blockchain, "solana"),
-          eq(walletAddresses.isVerified, true),
+          eq(nftListings.status, "active"),
+          eq(nfts.status, "listed"),
+          gt(nfts.remainingSupply, 0),
         ),
-      );
+      )
+      .orderBy(desc(nftListings.createdAt));
 
-    if (userAddresses.length === 0) {
-      return res.json({ success: true, assets: [] });
+    const response = listings.map((item) => ({
+      listingId: item.listingId,
+      nftId: item.nftId,
+      title: item.title,
+      description: item.description,
+      imageUrl: generateFileUrl(item.imageKey),
+      price: item.price,
+      remainingSupply: item.remainingSupply,
+      royaltyBps: item.royaltyBps,
+      creatorName: item.creatorName,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: response,
+    });
+  } catch (error) {
+    console.error("Get marketplace NFTs error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch marketplace NFTs",
+    });
+  }
+};
+
+// Buy NFT from listing
+export const buyNft = async (req: Request, res: Response) => {
+  try {
+    const user = getUserJwtFromToken(req);
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized",
+      });
     }
 
-    // Fetch NFTs for all user addresses
-    const allAssets = [];
-    for (const address of userAddresses) {
-      try {
-        const { fetchAssetsByOwner } = require("@metaplex-foundation/mpl-core");
-        const assets = await fetchAssetsByOwner(
-          umi,
-          publicKey(address.address),
-        );
-        allAssets.push(...assets);
-      } catch (error) {
-        console.error(
-          `Failed to fetch assets for address ${address.address}:`,
-          error,
-        );
+    const [reader] = await db
+      .select()
+      .from(readerProfile)
+      .where(eq(readerProfile.userId, user));
+
+    if (!reader) {
+      return res.status(403).json({
+        success: false,
+        error: "Only readers can buy NFTs",
+      });
+    }
+
+    const { listingId, quantity } = req.body;
+
+    if (!listingId || !quantity || quantity <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid listing or quantity",
+      });
+    }
+
+    const result = await db.transaction(async (tx) => {
+      // Fetch listing
+      const [listing] = await tx
+        .select()
+        .from(nftListings)
+        .where(eq(nftListings.id, listingId));
+
+      if (!listing || listing.status !== "active") {
+        throw new Error("Listing not available");
       }
-    }
 
-    res.json({
-      success: true,
-      assets: allAssets.map((asset) => ({
-        id: asset.publicKey,
-        name: asset.name,
-        uri: asset.uri,
-        owner: asset.owner,
-        updateAuthority: asset.updateAuthority,
-      })),
+      // Fetch NFT
+      const [nft] = await tx
+        .select()
+        .from(nfts)
+        .where(eq(nfts.id, listing.nftId));
+
+      if (!nft) throw new Error("NFT not found");
+
+      if (nft.remainingSupply < quantity) {
+        throw new Error("Not enough supply");
+      }
+
+      // Financial calculations
+      const pricePerUnit = Number(listing.price);
+      const totalPrice = pricePerUnit * quantity;
+
+      if (reader.walletBalance < totalPrice) {
+        throw new Error("Insufficient balance");
+      }
+
+      const platformFeePercent = 0.1;
+      const platformFee = totalPrice * platformFeePercent;
+      const sellerAmount = totalPrice - platformFee;
+
+      // Deduct buyer
+      await tx
+        .update(readerProfile)
+        .set({
+          walletBalance: reader.walletBalance - totalPrice,
+        })
+        .where(eq(readerProfile.id, reader.id));
+
+      // Credit seller
+      await tx
+        .update(creatorProfile)
+        .set({
+          walletBalance: sql`${creatorProfile.walletBalance} + ${sellerAmount}`,
+        })
+        .where(eq(creatorProfile.id, listing.sellerId));
+
+      // Create order
+      const [order] = await tx
+        .insert(nftOrders)
+        .values({
+          nftId: nft.id,
+          listingId: listing.id,
+          buyerId: reader.id,
+          sellerId: listing.sellerId,
+          quantity,
+          price: totalPrice.toString(),
+          platformFee: platformFee.toString(),
+          royaltyAmount: "0",
+          sellerAmount: sellerAmount.toString(),
+          status: "completed",
+          completedAt: new Date(),
+          metadata: {
+            unitPrice: pricePerUnit,
+          },
+        })
+        .returning();
+
+      // Update ownership
+      const [existingOwnership] = await tx
+        .select()
+        .from(nftOwnerships)
+        .where(
+          and(
+            eq(nftOwnerships.nftId, nft.id),
+            eq(nftOwnerships.ownerReaderId, reader.id),
+          ),
+        );
+
+      if (existingOwnership) {
+        await tx
+          .update(nftOwnerships)
+          .set({
+            quantity: existingOwnership.quantity + quantity,
+          })
+          .where(eq(nftOwnerships.id, existingOwnership.id));
+      } else {
+        await tx.insert(nftOwnerships).values({
+          nftId: nft.id,
+          ownerReaderId: reader.id,
+          quantity,
+        });
+      }
+
+      // Decrement supply
+      await tx
+        .update(nfts)
+        .set({
+          remainingSupply: nft.remainingSupply - quantity,
+        })
+        .where(eq(nfts.id, nft.id));
+
+      // If sold out
+      if (nft.remainingSupply - quantity === 0) {
+        await tx
+          .update(nftListings)
+          .set({ status: "sold" })
+          .where(eq(nftListings.id, listingId));
+      }
+
+      return order;
     });
-  } catch (error) {
-    console.error("Fetch user NFTs error:", error);
-    res.status(500).json({
-      error: "Failed to fetch user NFTs",
-      details: error.message,
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+      message: "NFT purchased successfully",
+    });
+  } catch (error: any) {
+    console.error("Buy NFT error:", error);
+    return res.status(400).json({
+      success: false,
+      error: error.message || "Failed to purchase NFT",
     });
   }
 };
 
-export const transferNft = async (req, res) => {
+// Get single marketplace NFT details
+export const getSingleMarketplaceNft = async (req: Request, res: Response) => {
   try {
-    const { assetId, userProfileId } = req.body;
+    const listingIdParam = req.params.listingId;
 
-    if (!assetId || !userProfileId) {
-      return res
-        .status(400)
-        .json({ error: "assetId and userProfileId are required" });
+    if (!listingIdParam || Array.isArray(listingIdParam)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid listing id",
+      });
     }
 
-    // Get user's wallet from database
-    const userWallet = await getUserWalletByUserId(userProfileId);
-    if (!userWallet) {
-      return res.status(404).json({ error: "User wallet not found" });
+    const listingId = listingIdParam;
+
+    const [result] = await db
+      .select({
+        listingId: nftListings.id,
+        nftId: nfts.id,
+        title: nfts.title,
+        description: nfts.description,
+        imageKey: nfts.imageKey,
+        price: nftListings.price,
+        remainingSupply: nfts.remainingSupply,
+        royaltyBps: nfts.royaltyBps,
+        listingStatus: nftListings.status,
+        creatorId: creatorProfile.id,
+        creatorName: creatorProfile.creatorName,
+      })
+      .from(nftListings)
+      .innerJoin(nfts, eq(nftListings.nftId, nfts.id))
+      .innerJoin(creatorProfile, eq(nftListings.sellerId, creatorProfile.id))
+      .where(eq(nftListings.id, listingId));
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: "NFT not found",
+      });
     }
 
-    // Get user's primary Solana address
-    const userSolanaWallet = await getUserPrimarySolanaAddress(userWallet.id);
-    if (!userSolanaWallet) {
-      return res
-        .status(404)
-        .json({ error: "User has no verified Solana wallet address" });
+    // Optional safety check
+    if (result.listingStatus !== "active" || result.remainingSupply <= 0) {
+      return res.status(404).json({
+        success: false,
+        error: "NFT not available",
+      });
     }
 
-    // Verify the asset exists and is owned by master wallet
-    const asset = await fetchAsset(umi, publicKey(assetId));
-    if (asset.owner !== masterWallet.publicKey) {
-      return res
-        .status(400)
-        .json({ error: "Asset is not owned by platform wallet" });
-    }
-
-    // Transfer the asset
-    const transferResult = await transfer(umi, {
-      asset: publicKey(assetId),
-      newOwner: publicKey(userSolanaWallet.address),
-    }).sendAndConfirm(umi);
-
-    res.json({
+    return res.status(200).json({
       success: true,
-      assetId,
-      transferSignature: transferResult.signature,
-      userWalletAddress: userSolanaWallet.address,
-      message: "NFT transferred to user successfully",
+      data: {
+        listingId: result.listingId,
+        nftId: result.nftId,
+        title: result.title,
+        description: result.description,
+        imageUrl: generateFileUrl(result.imageKey),
+        price: result.price,
+        remainingSupply: result.remainingSupply,
+        royaltyBps: result.royaltyBps,
+        creator: {
+          id: result.creatorId,
+          creatorName: result.creatorName,
+        },
+      },
     });
   } catch (error) {
-    console.error("Transfer error:", error);
-    res.status(500).json({
-      error: "Failed to transfer NFT",
-      details: error.message,
+    console.error("Get single marketplace NFT error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch NFT",
     });
   }
 };
 
-export const getPlatformNFTs = async (req, res) => {
+// Get My Purchased NFTs (Readers only)
+export const getMyPurchasedNfts = async (req: Request, res: Response) => {
   try {
-    const { fetchAssetsByOwner } = require("@metaplex-foundation/mpl-core");
-    const assets = await fetchAssetsByOwner(umi, masterWallet.publicKey);
+    const user = getUserJwtFromToken(req);
 
-    res.json({
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized",
+      });
+    }
+
+    // Get reader profile
+    const [reader] = await db
+      .select()
+      .from(readerProfile)
+      .where(eq(readerProfile.userId, user));
+
+    if (!reader) {
+      return res.status(403).json({
+        success: false,
+        error: "Only readers can access this resource",
+      });
+    }
+
+    // Join ownership + NFT definition
+    const ownedNfts = await db
+      .select({
+        nftId: nfts.id,
+        title: nfts.title,
+        description: nfts.description,
+        imageKey: nfts.imageKey,
+        tokenURI: nfts.tokenURI,
+        royaltyBps: nfts.royaltyBps,
+        quantity: nftOwnerships.quantity,
+      })
+      .from(nftOwnerships)
+      .innerJoin(nfts, eq(nftOwnerships.nftId, nfts.id))
+      .where(eq(nftOwnerships.ownerReaderId, reader.id));
+
+    const response = ownedNfts.map((item) => ({
+      nftId: item.nftId,
+      title: item.title,
+      description: item.description,
+      imageUrl: generateFileUrl(item.imageKey),
+      tokenURI: item.tokenURI,
+      royaltyBps: item.royaltyBps,
+      quantityOwned: item.quantity,
+    }));
+
+    return res.status(200).json({
       success: true,
-      assets: assets.map((asset) => ({
-        id: asset.publicKey,
-        name: asset.name,
-        uri: asset.uri,
-        owner: asset.owner,
-        updateAuthority: asset.updateAuthority,
-      })),
+      data: response,
     });
   } catch (error) {
-    console.error("Fetch platform NFTs error:", error);
-    res.status(500).json({
-      error: "Failed to fetch platform NFTs",
-      details: error.message,
+    console.error("Get purchased NFTs error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch purchased NFTs",
+    });
+  }
+};
+
+// Delete NFT (Creators only, with rules) - Only if not listed, not sold, no orders, no ownership records
+export const deleteNft = async (req: Request, res: Response) => {
+  try {
+    const user = getUserJwtFromToken(req);
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized",
+      });
+    }
+
+    const idParam = req.params.id;
+
+    if (!idParam || Array.isArray(idParam)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid NFT id",
+      });
+    }
+
+    const nftId = idParam;
+
+    const [creator] = await db
+      .select()
+      .from(creatorProfile)
+      .where(eq(creatorProfile.userId, user));
+
+    if (!creator) {
+      return res.status(403).json({
+        success: false,
+        error: "Only creators can delete NFTs",
+      });
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const [nft] = await tx
+        .select()
+        .from(nfts)
+        .where(and(eq(nfts.id, nftId), eq(nfts.creatorId, creator.id)));
+
+      if (!nft) {
+        throw new Error("NFT not found");
+      }
+
+      // Rule 1: Must not be listed
+      if (nft.status === "listed") {
+        throw new Error("Cannot delete a listed NFT");
+      }
+
+      // Rule 2: Must not be sold
+      if (nft.remainingSupply < nft.supply) {
+        throw new Error("Cannot delete NFT that has been purchased");
+      }
+
+      // Rule 3: No active listing
+      const [listing] = await tx
+        .select()
+        .from(nftListings)
+        .where(eq(nftListings.nftId, nftId));
+
+      if (listing) {
+        throw new Error("Cannot delete NFT with existing listing");
+      }
+
+      // Rule 4: No ownership
+      const [ownership] = await tx
+        .select()
+        .from(nftOwnerships)
+        .where(eq(nftOwnerships.nftId, nftId));
+
+      if (ownership) {
+        throw new Error("Cannot delete NFT with ownership records");
+      }
+
+      // Rule 5: No orders
+      const [order] = await tx
+        .select()
+        .from(nftOrders)
+        .where(eq(nftOrders.nftId, nftId));
+
+      if (order) {
+        throw new Error("Cannot delete NFT with purchase history");
+      }
+
+      await tx.delete(nfts).where(eq(nfts.id, nftId));
+
+      return true;
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "NFT deleted successfully",
+    });
+  } catch (error: any) {
+    console.error("Delete NFT error:", error);
+    return res.status(400).json({
+      success: false,
+      error: error.message || "Failed to delete NFT",
     });
   }
 };

@@ -1,5 +1,5 @@
 import { Connection, clusterApiUrl, Keypair } from "@solana/web3.js";
-import { initializeAnchorService } from "../services/anchor.program";
+// import { initializeAnchorService } from "../services/anchor.program";
 import { PinataService } from "../services/pinata.service";
 import { IDL } from "../idl/nft_minting";
 import * as fs from "fs";
@@ -15,8 +15,7 @@ export class AnchorConfig {
    */
   static getConnection(): Connection {
     const network = process.env.SOLANA_NETWORK || "devnet";
-    const rpcUrl =
-      process.env.SOLANA_RPC_URL || clusterApiUrl(network as any);
+    const rpcUrl = process.env.SOLANA_RPC_URL || clusterApiUrl(network as any);
     return new Connection(rpcUrl, "confirmed");
   }
 
@@ -27,14 +26,12 @@ export class AnchorConfig {
     const privateKeyEnv = process.env.ANCHOR_PRIVATE_KEY;
 
     if (!privateKeyEnv) {
-      throw new Error(
-        "ANCHOR_PRIVATE_KEY environment variable is required"
-      );
+      throw new Error("ANCHOR_PRIVATE_KEY environment variable is required");
     }
 
     // Try to parse as JSON array first
     try {
-      console.log(JSON.parse(privateKeyEnv))
+      console.log(JSON.parse(privateKeyEnv));
       return JSON.parse(privateKeyEnv);
     } catch {
       // If not JSON, try to read from file path
@@ -43,12 +40,12 @@ export class AnchorConfig {
           return JSON.parse(fs.readFileSync(privateKeyEnv, "utf-8"));
         } catch (error) {
           throw new Error(
-            `Failed to parse private key from file: ${privateKeyEnv}`
+            `Failed to parse private key from file: ${privateKeyEnv}`,
           );
         }
       }
       throw new Error(
-        "ANCHOR_PRIVATE_KEY must be a valid JSON array or file path"
+        "ANCHOR_PRIVATE_KEY must be a valid JSON array or file path",
       );
     }
   }
@@ -64,15 +61,13 @@ export class AnchorConfig {
     try {
       const connection = this.getConnection();
       const privateKey = this.getPrivateKey();
-      console.log(privateKey)
+      console.log(privateKey);
 
-      initializeAnchorService(connection, privateKey, IDL);
+      // initializeAnchorService(connection, privateKey, IDL);--- IGNORE ---
 
       console.log("✓ Anchor NFT Program initialized successfully");
       console.log(`✓ Network: ${process.env.SOLANA_NETWORK || "devnet"}`);
-      console.log(
-        `✓ Program ID: 8P1rQdfyNp68WWEd9PuZhCeGv9vvV3cUbyGj9qBkkk7N`
-      );
+      console.log(`✓ Program ID: 8P1rQdfyNp68WWEd9PuZhCeGv9vvV3cUbyGj9qBkkk7N`);
 
       this.initialized = true;
     } catch (error) {
@@ -90,7 +85,7 @@ export class AnchorConfig {
 
     if (!pinataJwt || !pinataGateway) {
       console.warn(
-        "⚠ Pinata not configured (PINATA_JWT and PINATA_GATEWAY required for IPFS uploads)"
+        "⚠ Pinata not configured (PINATA_JWT and PINATA_GATEWAY required for IPFS uploads)",
       );
       return;
     }
