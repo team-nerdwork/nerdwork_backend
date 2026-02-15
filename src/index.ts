@@ -13,7 +13,7 @@ import fileRoutes from "./routes/files.routes";
 import libraryRoutes from "./routes/library.routes";
 import transactionRoutes from "./routes/transaction.routes";
 // import nftRouterV2 from "./routes/anchor.nft.routes";
-// import marketplaceRoutes from "./routes/marketplace.routes";
+import marketplaceRoutes from "./routes/marketplace.routes";
 import notificationRoutes from "./routes/notification.routes";
 import mobileComicsRoutes from "./routes/mobile.comics.routes";
 import analyticsRoutes from "./routes/analytics.routes";
@@ -53,7 +53,7 @@ function registerRoutes() {
   app.use("/library", libraryRoutes);
   app.use("/transactions", transactionRoutes);
   // app.use("/anchor-nft", nftRouterV2);
-  // app.use("/marketplace", marketplaceRoutes);
+  app.use("/marketplace", marketplaceRoutes);
   app.use("/notifications", notificationRoutes);
   app.use("/mobile", mobileComicsRoutes);
   app.use("/analytics", analyticsRoutes);
