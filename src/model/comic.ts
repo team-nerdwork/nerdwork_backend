@@ -1,4 +1,4 @@
-import {
+﻿import {
   pgTable,
   uuid,
   varchar,
@@ -14,6 +14,7 @@ export const comicStatusEnum = pgEnum("comic_status_enum", [
   "pending",
   "scheduled",
   "draft",
+  "flagged",
 ]);
 
 export const comics = pgTable("comics", {
