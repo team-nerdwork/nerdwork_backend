@@ -9,6 +9,7 @@ export * from "./chapter";
 export * from "./library";
 export * from "./creatorTransaction";
 export * from "./userTransaction";
+export * from "./nft/nft.schema";
 export * from "./nft/nft-listings.schema";
 export * from "./nft/nft-order.schema";
 export * from "./nft/nft-ownership-history.schema";

@@ -5,7 +5,7 @@ import {
   comics,
   creatorProfile,
   creatorTransactions,
-  nft,
+  nfts,
   nftOrders,
   userProfiles,
   userTransactions,
@@ -146,13 +146,10 @@ export async function getAdminOverview() {
   const nftCounts = await db
     .select({
       creatorId: creatorProfile.id,
-      nfts: sql<number>`COALESCE(COUNT(${nft.id}), 0)`,
+      nfts: sql<number>`COALESCE(COUNT(${nfts.id}), 0)`,
     })
     .from(creatorProfile)
-    .leftJoin(authUsers, eq(creatorProfile.userId, authUsers.id))
-    .leftJoin(userProfiles, eq(userProfiles.authUserId, authUsers.id))
-    .leftJoin(userWallets, eq(userWallets.userProfileId, userProfiles.id))
-    .leftJoin(nft, eq(nft.owner, userWallets.id))
+    .leftJoin(nfts, eq(nfts.ownerCreatorId, creatorProfile.id))
     .groupBy(creatorProfile.id);
 
   const nftCountMap = new Map(
@@ -222,7 +219,7 @@ export async function listUsers({ query, status, page, pageSize }) {
 
   const whereClause = conditions.length ? and(...conditions) : undefined;
 
-  let usersQuery = db
+  const usersBaseQuery = db
     .select({
       id: authUsers.id,
       email: authUsers.email,
@@ -247,25 +244,21 @@ export async function listUsers({ query, status, page, pageSize }) {
     .from(authUsers)
     .leftJoin(userProfiles, eq(userProfiles.authUserId, authUsers.id));
 
-  if (whereClause) {
-    usersQuery = usersQuery.where(whereClause);
-  }
-
-  const rows = await usersQuery
+  const rows = await (whereClause
+    ? usersBaseQuery.where(whereClause)
+    : usersBaseQuery)
     .orderBy(desc(authUsers.createdAt))
     .limit(safePageSize)
     .offset(offset);
 
-  let countQuery = db
+  const countBaseQuery = db
     .select({ count: sql<number>`COUNT(*)` })
     .from(authUsers)
     .leftJoin(userProfiles, eq(userProfiles.authUserId, authUsers.id));
 
-  if (whereClause) {
-    countQuery = countQuery.where(whereClause);
-  }
-
-  const [{ count = 0 }] = await countQuery;
+  const [{ count = 0 }] = await (whereClause
+    ? countBaseQuery.where(whereClause)
+    : countBaseQuery);
 
   const now = new Date();
 
@@ -360,7 +353,7 @@ export async function listCreators({ query, status, page, pageSize }) {
 
   const whereClause = conditions.length ? and(...conditions) : undefined;
 
-  let creatorsQuery = db
+  const creatorsBaseQuery = db
     .select({
       id: creatorProfile.id,
       creatorName: creatorProfile.creatorName,
@@ -374,25 +367,21 @@ export async function listCreators({ query, status, page, pageSize }) {
     .from(creatorProfile)
     .leftJoin(authUsers, eq(creatorProfile.userId, authUsers.id));
 
-  if (whereClause) {
-    creatorsQuery = creatorsQuery.where(whereClause);
-  }
-
-  const rows = await creatorsQuery
+  const rows = await (whereClause
+    ? creatorsBaseQuery.where(whereClause)
+    : creatorsBaseQuery)
     .orderBy(desc(creatorProfile.createdAt))
     .limit(safePageSize)
     .offset(offset);
 
-  let countQuery = db
+  const countBaseQuery = db
     .select({ count: sql<number>`COUNT(*)` })
     .from(creatorProfile)
     .leftJoin(authUsers, eq(creatorProfile.userId, authUsers.id));
 
-  if (whereClause) {
-    countQuery = countQuery.where(whereClause);
-  }
-
-  const [{ count = 0 }] = await countQuery;
+  const [{ count = 0 }] = await (whereClause
+    ? countBaseQuery.where(whereClause)
+    : countBaseQuery);
 
   const data = rows.map((row) => ({
     id: row.id,
@@ -453,7 +442,7 @@ export async function listComics({ query, status, page, pageSize }) {
 
   const whereClause = conditions.length ? and(...conditions) : undefined;
 
-  let comicsQuery = db
+  const comicsBaseQuery = db
     .select({
       id: comics.id,
       title: comics.title,
@@ -481,25 +470,21 @@ export async function listComics({ query, status, page, pageSize }) {
     .from(comics)
     .leftJoin(creatorProfile, eq(comics.creatorId, creatorProfile.id));
 
-  if (whereClause) {
-    comicsQuery = comicsQuery.where(whereClause);
-  }
-
-  const rows = await comicsQuery
+  const rows = await (whereClause
+    ? comicsBaseQuery.where(whereClause)
+    : comicsBaseQuery)
     .orderBy(desc(comics.createdAt))
     .limit(safePageSize)
     .offset(offset);
 
-  let countQuery = db
+  const countBaseQuery = db
     .select({ count: sql<number>`COUNT(*)` })
     .from(comics)
     .leftJoin(creatorProfile, eq(comics.creatorId, creatorProfile.id));
 
-  if (whereClause) {
-    countQuery = countQuery.where(whereClause);
-  }
-
-  const [{ count = 0 }] = await countQuery;
+  const [{ count = 0 }] = await (whereClause
+    ? countBaseQuery.where(whereClause)
+    : countBaseQuery);
 
   const data = rows.map((row) => ({
     id: row.id,
@@ -546,12 +531,12 @@ export async function updateComicStatus({ comicId, status }) {
 export async function getMarketplaceSummary() {
   const [{ totalNfts = 0 }] = await db
     .select({ totalNfts: sql<number>`COUNT(*)` })
-    .from(nft);
+    .from(nfts);
 
   const [{ sales7d = 0, volume7d = 0 }] = await db
     .select({
       sales7d: sql<number>`COUNT(*)`,
-      volume7d: sql<number>`COALESCE(SUM(${nftOrders.purchasePrice}), 0)`,
+      volume7d: sql<number>`COALESCE(SUM(${nftOrders.price}), 0)`,
     })
     .from(nftOrders)
     .where(sql`${nftOrders.createdAt} >= now() - interval '7 days'`);
@@ -616,7 +601,7 @@ export async function listPayouts({ status, page, pageSize }) {
 
   const whereClause = conditions.length ? and(...conditions) : undefined;
 
-  let payoutsQuery = db
+  const payoutsBaseQuery = db
     .select({
       id: creatorTransactions.id,
       creatorName: creatorProfile.creatorName,
@@ -627,25 +612,21 @@ export async function listPayouts({ status, page, pageSize }) {
     .from(creatorTransactions)
     .leftJoin(creatorProfile, eq(creatorTransactions.creatorId, creatorProfile.id));
 
-  if (whereClause) {
-    payoutsQuery = payoutsQuery.where(whereClause);
-  }
-
-  const rows = await payoutsQuery
+  const rows = await (whereClause
+    ? payoutsBaseQuery.where(whereClause)
+    : payoutsBaseQuery)
     .orderBy(desc(creatorTransactions.createdAt))
     .limit(safePageSize)
     .offset(offset);
 
-  let countQuery = db
+  const countBaseQuery = db
     .select({ count: sql<number>`COUNT(*)` })
     .from(creatorTransactions)
     .leftJoin(creatorProfile, eq(creatorTransactions.creatorId, creatorProfile.id));
 
-  if (whereClause) {
-    countQuery = countQuery.where(whereClause);
-  }
-
-  const [{ count = 0 }] = await countQuery;
+  const [{ count = 0 }] = await (whereClause
+    ? countBaseQuery.where(whereClause)
+    : countBaseQuery);
 
   const data = rows.map((row) => ({
     id: row.id,
