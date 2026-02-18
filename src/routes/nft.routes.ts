@@ -59,11 +59,11 @@ const router = Router();
  *               tags:
  *                 type: string
  *                 description: JSON stringified array of tags
- *                 example: '["rain", "comic", "limited"]'
+ *                 example: ["rain", "comic", "limited"]
  *               properties:
  *                 type: string
  *                 description: JSON stringified array of NFT attributes
- *                 example: '[{"trait_type":"Weather","value":"Rainy"}]'
+ *                 example: [{"trait_type":"Weather","value":"Rainy"}]
  *
  *     responses:
  *       201:

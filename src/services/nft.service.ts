@@ -15,7 +15,14 @@ export const pinFileToPinataByKey = async (key: string) => {
   });
 
   const formData = new FormData();
-  formData.append("file", fileResponse.data);
+  formData.append("file", fileResponse.data, {
+    filename: key.split("/").pop(), // clean filename
+  });
+  const pinataJwt = process.env.PINATA_JWT?.trim();
+
+  if (!pinataJwt) {
+    throw new Error("PINATA_JWT is missing");
+  }
 
   const res = await axios.post(
     "https://api.pinata.cloud/pinning/pinFileToIPFS",
@@ -23,7 +30,7 @@ export const pinFileToPinataByKey = async (key: string) => {
     {
       headers: {
         ...formData.getHeaders(),
-        Authorization: `Bearer ${process.env.PINATA_JWT}`,
+        Authorization: `Bearer ${pinataJwt}`,
       },
     },
   );

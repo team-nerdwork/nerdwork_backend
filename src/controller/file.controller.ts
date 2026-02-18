@@ -92,6 +92,7 @@ import jwt from "jsonwebtoken";
 import { db } from "../config/db";
 import { creatorProfile } from "../model/profile";
 import { eq } from "drizzle-orm";
+import { getUserJwtFromToken } from "./library.controller";
 
 // S3 client
 const s3Client = new S3Client({
@@ -111,14 +112,10 @@ export const uploadToS3 = async (req: any, res: any) => {
         .json({ success: false, error: "No token provided" });
     }
 
-    let decoded: any;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET!);
-    } catch (err) {
-      return res.status(403).json({ success: false, error: "Invalid token" });
+    const userId = getUserJwtFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ success: false, error: "Invalid token" });
     }
-
-    const userId = decoded.userId;
 
     const [creator] = await db
       .select()
@@ -201,7 +198,7 @@ const privateKey = process.env.CLOUDFRONT_PRIVATE_KEY;
  */
 export const generateFileUrl = (
   key: string,
-  expiresIn = 60 * 60 * 1000
+  expiresIn = 60 * 60 * 1000,
 ): string => {
   if (!key) return "";
 

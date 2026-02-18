@@ -21,7 +21,7 @@ import { deviceTokens, notifications } from "../model/notification";
 import { sendPushNotification } from "../services/push.service";
 
 // helper function to strip URL
-function extractFilePath(url: string): string {
+export function extractFilePath(url: string): string {
   try {
     const urlObj = new URL(url);
     return urlObj.pathname.startsWith("/")
@@ -48,8 +48,8 @@ export async function getChapterLikes(chapterId, readerId?) {
       .where(
         and(
           eq(chapterLikes.chapterId, chapterId),
-          eq(chapterLikes.readerId, readerId)
-        )
+          eq(chapterLikes.readerId, readerId),
+        ),
       );
 
     hasLiked = !!existingLike;
@@ -91,8 +91,8 @@ export const createChapter = async (req, res) => {
       .where(
         and(
           eq(chapters.comicId, comicId),
-          eq(chapters.chapterStatus, "published")
-        )
+          eq(chapters.chapterStatus, "published"),
+        ),
       );
 
     const nextSerial = (lastChapter?.maxSerial || 0) + 1;
@@ -246,8 +246,8 @@ export const fetchChaptersByComicSlugForReaders = async (req, res) => {
       .where(
         and(
           eq(chapters.comicId, comic.id),
-          eq(chapters.chapterStatus, "published")
-        )
+          eq(chapters.chapterStatus, "published"),
+        ),
       );
 
     // If logged in, fetch viewed chapters
@@ -272,7 +272,7 @@ export const fetchChaptersByComicSlugForReaders = async (req, res) => {
       allChapters.map(async (chapter) => {
         const { likesCount, hasLiked } = await getChapterLikes(
           chapter.id,
-          reader?.id
+          reader?.id,
         );
         const { viewsCount } = await getChapterViews(chapter.id);
         return {
@@ -296,7 +296,7 @@ export const fetchChaptersByComicSlugForReaders = async (req, res) => {
           viewsCount,
           hasLiked,
         };
-      })
+      }),
     );
 
     return res.status(200).json({
@@ -348,7 +348,7 @@ export const fetchChaptersByComicSlugForCreators = async (req, res) => {
           viewsCount,
           likesCount,
         };
-      })
+      }),
     );
     return res.status(200).json({
       success: true,
@@ -473,8 +473,8 @@ export const publishDraft = async (req, res) => {
         and(
           eq(chapters.uniqueCode, draftUniqCode),
           eq(chapters.comicId, comicId),
-          eq(chapters.chapterStatus, "draft")
-        )
+          eq(chapters.chapterStatus, "draft"),
+        ),
       );
 
     if (!chapter) {
@@ -489,8 +489,8 @@ export const publishDraft = async (req, res) => {
       .where(
         and(
           eq(chapters.comicId, comicId),
-          eq(chapters.chapterStatus, "published")
-        )
+          eq(chapters.chapterStatus, "published"),
+        ),
       );
 
     const nextSerial = (lastChapter?.maxSerial || 0) + 1;
@@ -576,8 +576,8 @@ export const deleteChapter = async (req, res) => {
       .where(
         and(
           eq(chapters.comicId, comic.id),
-          eq(chapters.chapterStatus, "published")
-        )
+          eq(chapters.chapterStatus, "published"),
+        ),
       )
       .orderBy(chapters.serialNo);
 
@@ -694,7 +694,7 @@ export const buyChapter = async (req: any, res: any) => {
       chapterId, // Content being purchased (chapter ID)
       nwtAmount, // Amount in NWT
       "chapter_unlock", // Content type
-      0.3 // Platform fee (30%)
+      0.3, // Platform fee (30%)
     );
 
     if (!purchaseResult.success) {
@@ -825,8 +825,8 @@ export const addChapterView = async (req, res) => {
       .where(
         and(
           eq(chapterViews.readerId, reader.id),
-          eq(chapterViews.chapterId, chapterId)
-        )
+          eq(chapterViews.chapterId, chapterId),
+        ),
       );
 
     if (existingView.length > 0) {
@@ -874,8 +874,8 @@ export const toggleChapterLike = async (req, res) => {
       .where(
         and(
           eq(chapterLikes.chapterId, chapterId),
-          eq(chapterLikes.readerId, reader.id)
-        )
+          eq(chapterLikes.readerId, reader.id),
+        ),
       );
 
     if (existingLike) {
@@ -1078,7 +1078,7 @@ async function notifyComicSubscribers({
       await sendMail(
         sub.email,
         `New Chapter: ${chapter.title} — ${comic.title}`,
-        html
+        html,
       );
     } catch (err) {
       console.error(`Email failed for ${sub.email}`, err);

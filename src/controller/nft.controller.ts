@@ -13,6 +13,7 @@ import {
 import { getUserJwtFromToken } from "./library.controller";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
 import { generateFileUrl } from "./file.controller";
+import { extractFilePath } from "./chapter.controller";
 
 // Mint NFT
 export const mintNft = async (req: Request, res: Response) => {
@@ -60,12 +61,13 @@ export const mintNft = async (req: Request, res: Response) => {
 
     const result = await db.transaction(async (tx) => {
       // 1️⃣ Create NFT in draft
+      const filePath = extractFilePath(imageKey);
       const [draftNft] = await tx
         .insert(nfts)
         .values({
           title: name,
           description,
-          imageKey,
+          imageKey: filePath,
           creatorId: creator.id,
           ownerCreatorId: creator.id,
           supply: Number(supply),
@@ -80,7 +82,7 @@ export const mintNft = async (req: Request, res: Response) => {
         .returning();
 
       // 2️⃣ Pin image → imageCID
-      const imageCID = await pinFileToPinataByKey(imageKey);
+      const imageCID = await pinFileToPinataByKey(filePath);
 
       // 3️⃣ Build metadata JSON (IPFS standard)
       const metadataJson = {
@@ -126,6 +128,7 @@ export const mintNft = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Mint NFT error:", error);
+    console.log("Error...", error.response?.data);
 
     return res.status(500).json({
       success: false,
