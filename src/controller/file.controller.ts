@@ -112,7 +112,7 @@ export const uploadToS3 = async (req: any, res: any) => {
         .json({ success: false, error: "No token provided" });
     }
 
-    const userId = getUserJwtFromToken(token);
+    const userId = getUserJwtFromToken(req);
     if (!userId) {
       return res.status(401).json({ success: false, error: "Invalid token" });
     }
