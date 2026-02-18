@@ -1,4 +1,4 @@
-import {
+﻿import {
   pgTable,
   uuid,
   text,
@@ -41,6 +41,11 @@ export const walletTypeEnum = pgEnum("wallet_type_enum", [
   "phantom",
 ]);
 
+export const creatorVerificationStatusEnum = pgEnum(
+  "creator_verification_status",
+  ["pending", "verified", "rejected"],
+);
+
 // --- CREATOR PROFILE ---
 export const creatorProfile = pgTable("creator_profile", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -61,6 +66,10 @@ export const creatorProfile = pgTable("creator_profile", {
   walletType: walletTypeEnum("wallet_type"), // 'solana' | 'phantom' (nullable until chosen)
   walletAddress: text("wallet_address"), // nullable until provided
   walletBalance: doublePrecision("wallet_balance").notNull().default(0),
+  verificationStatus: creatorVerificationStatusEnum("verification_status")
+    .notNull()
+    .default("pending"),
+  verifiedAt: timestamp("verified_at", { mode: "date" }),
 
   pinHash: text("pin_hash"),
 
