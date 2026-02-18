@@ -5,7 +5,6 @@ import {
   comics,
   creatorProfile,
   creatorTransactions,
-  nft,
   nftOrders,
   userProfiles,
   userTransactions,
@@ -14,6 +13,7 @@ import {
   chapterViews,
 } from "../model/schema";
 import { adminAuditLogs } from "../model/admin";
+import { nfts } from "../model/nft/nft.schema";
 
 const toNumber = (value: any) =>
   value === null || value === undefined ? 0 : Number(value);
@@ -99,7 +99,9 @@ export async function getAdminOverview() {
   const revenueMap = new Map(
     revenueRows.map((row) => [row.month, toNumber(row.revenue)]),
   );
-  const userMap = new Map(userRows.map((row) => [row.month, Number(row.users)]));
+  const userMap = new Map(
+    userRows.map((row) => [row.month, Number(row.users)]),
+  );
 
   const revenueAndUsers = months.map((month) => ({
     month: month.label,
@@ -146,13 +148,13 @@ export async function getAdminOverview() {
   const nftCounts = await db
     .select({
       creatorId: creatorProfile.id,
-      nfts: sql<number>`COALESCE(COUNT(${nft.id}), 0)`,
+      nfts: sql<number>`COALESCE(COUNT(${nfts.id}), 0)`,
     })
     .from(creatorProfile)
     .leftJoin(authUsers, eq(creatorProfile.userId, authUsers.id))
     .leftJoin(userProfiles, eq(userProfiles.authUserId, authUsers.id))
     .leftJoin(userWallets, eq(userWallets.userProfileId, userProfiles.id))
-    .leftJoin(nft, eq(nft.owner, userWallets.id))
+    .leftJoin(nfts, eq(nfts.creatorId, userWallets.id))
     .groupBy(creatorProfile.id);
 
   const nftCountMap = new Map(
@@ -187,8 +189,11 @@ export async function getAdminOverview() {
 }
 
 export async function listUsers({ query, status, page, pageSize }) {
-  const { page: safePage, pageSize: safePageSize, offset } =
-    normalizePagination(page, pageSize);
+  const {
+    page: safePage,
+    pageSize: safePageSize,
+    offset,
+  } = normalizePagination(page, pageSize);
 
   const conditions = [] as any[];
   if (query) {
@@ -222,7 +227,7 @@ export async function listUsers({ query, status, page, pageSize }) {
 
   const whereClause = conditions.length ? and(...conditions) : undefined;
 
-  let usersQuery = db
+  const rows = await db
     .select({
       id: authUsers.id,
       email: authUsers.email,
@@ -245,27 +250,19 @@ export async function listUsers({ query, status, page, pageSize }) {
       ), 0)`,
     })
     .from(authUsers)
-    .leftJoin(userProfiles, eq(userProfiles.authUserId, authUsers.id));
-
-  if (whereClause) {
-    usersQuery = usersQuery.where(whereClause);
-  }
-
-  const rows = await usersQuery
+    .leftJoin(userProfiles, eq(userProfiles.authUserId, authUsers.id))
+    .where(whereClause)
     .orderBy(desc(authUsers.createdAt))
     .limit(safePageSize)
     .offset(offset);
 
-  let countQuery = db
+  const countRows = await db
     .select({ count: sql<number>`COUNT(*)` })
     .from(authUsers)
-    .leftJoin(userProfiles, eq(userProfiles.authUserId, authUsers.id));
+    .leftJoin(userProfiles, eq(userProfiles.authUserId, authUsers.id))
+    .where(whereClause);
 
-  if (whereClause) {
-    countQuery = countQuery.where(whereClause);
-  }
-
-  const [{ count = 0 }] = await countQuery;
+  const [{ count = 0 }] = countRows;
 
   const now = new Date();
 
@@ -339,8 +336,11 @@ export async function updateUserStatus({
 }
 
 export async function listCreators({ query, status, page, pageSize }) {
-  const { page: safePage, pageSize: safePageSize, offset } =
-    normalizePagination(page, pageSize);
+  const {
+    page: safePage,
+    pageSize: safePageSize,
+    offset,
+  } = normalizePagination(page, pageSize);
 
   const conditions = [] as any[];
   if (query) {
@@ -360,7 +360,7 @@ export async function listCreators({ query, status, page, pageSize }) {
 
   const whereClause = conditions.length ? and(...conditions) : undefined;
 
-  let creatorsQuery = db
+  const rows = await db
     .select({
       id: creatorProfile.id,
       creatorName: creatorProfile.creatorName,
@@ -372,25 +372,17 @@ export async function listCreators({ query, status, page, pageSize }) {
       revenue: sql<number>`COALESCE((SELECT SUM(ct.nwt_amount) FROM creator_transactions ct WHERE ct.creator_id = ${creatorProfile.id}), 0)`,
     })
     .from(creatorProfile)
-    .leftJoin(authUsers, eq(creatorProfile.userId, authUsers.id));
-
-  if (whereClause) {
-    creatorsQuery = creatorsQuery.where(whereClause);
-  }
-
-  const rows = await creatorsQuery
+    .leftJoin(authUsers, eq(creatorProfile.userId, authUsers.id))
+    .where(whereClause)
     .orderBy(desc(creatorProfile.createdAt))
     .limit(safePageSize)
     .offset(offset);
 
-  let countQuery = db
+  const countQuery = db
     .select({ count: sql<number>`COUNT(*)` })
     .from(creatorProfile)
-    .leftJoin(authUsers, eq(creatorProfile.userId, authUsers.id));
-
-  if (whereClause) {
-    countQuery = countQuery.where(whereClause);
-  }
+    .leftJoin(authUsers, eq(creatorProfile.userId, authUsers.id))
+    .where(whereClause);
 
   const [{ count = 0 }] = await countQuery;
 
@@ -438,8 +430,11 @@ export async function updateCreatorVerification({ creatorId, status }) {
 }
 
 export async function listComics({ query, status, page, pageSize }) {
-  const { page: safePage, pageSize: safePageSize, offset } =
-    normalizePagination(page, pageSize);
+  const {
+    page: safePage,
+    pageSize: safePageSize,
+    offset,
+  } = normalizePagination(page, pageSize);
 
   const conditions = [] as any[];
   if (query) {
@@ -453,7 +448,7 @@ export async function listComics({ query, status, page, pageSize }) {
 
   const whereClause = conditions.length ? and(...conditions) : undefined;
 
-  let comicsQuery = db
+  const rows = await db
     .select({
       id: comics.id,
       title: comics.title,
@@ -479,27 +474,17 @@ export async function listComics({ query, status, page, pageSize }) {
       ), 0)`,
     })
     .from(comics)
-    .leftJoin(creatorProfile, eq(comics.creatorId, creatorProfile.id));
-
-  if (whereClause) {
-    comicsQuery = comicsQuery.where(whereClause);
-  }
-
-  const rows = await comicsQuery
+    .leftJoin(creatorProfile, eq(comics.creatorId, creatorProfile.id))
+    .where(whereClause)
     .orderBy(desc(comics.createdAt))
     .limit(safePageSize)
     .offset(offset);
 
-  let countQuery = db
+  const [{ count = 0 }] = await db
     .select({ count: sql<number>`COUNT(*)` })
     .from(comics)
-    .leftJoin(creatorProfile, eq(comics.creatorId, creatorProfile.id));
-
-  if (whereClause) {
-    countQuery = countQuery.where(whereClause);
-  }
-
-  const [{ count = 0 }] = await countQuery;
+    .leftJoin(creatorProfile, eq(comics.creatorId, creatorProfile.id))
+    .where(whereClause);
 
   const data = rows.map((row) => ({
     id: row.id,
@@ -546,12 +531,12 @@ export async function updateComicStatus({ comicId, status }) {
 export async function getMarketplaceSummary() {
   const [{ totalNfts = 0 }] = await db
     .select({ totalNfts: sql<number>`COUNT(*)` })
-    .from(nft);
+    .from(nfts);
 
   const [{ sales7d = 0, volume7d = 0 }] = await db
     .select({
       sales7d: sql<number>`COUNT(*)`,
-      volume7d: sql<number>`COALESCE(SUM(${nftOrders.purchasePrice}), 0)`,
+      volume7d: sql<number>`COALESCE(SUM(${nftOrders.price}), 0)`,
     })
     .from(nftOrders)
     .where(sql`${nftOrders.createdAt} >= now() - interval '7 days'`);
@@ -603,8 +588,11 @@ export async function getFinanceSummary() {
 }
 
 export async function listPayouts({ status, page, pageSize }) {
-  const { page: safePage, pageSize: safePageSize, offset } =
-    normalizePagination(page, pageSize);
+  const {
+    page: safePage,
+    pageSize: safePageSize,
+    offset,
+  } = normalizePagination(page, pageSize);
 
   const conditions = [
     eq(creatorTransactions.transactionType, "withdrawal"),
@@ -616,7 +604,7 @@ export async function listPayouts({ status, page, pageSize }) {
 
   const whereClause = conditions.length ? and(...conditions) : undefined;
 
-  let payoutsQuery = db
+  const rows = await db
     .select({
       id: creatorTransactions.id,
       creatorName: creatorProfile.creatorName,
@@ -625,25 +613,23 @@ export async function listPayouts({ status, page, pageSize }) {
       createdAt: creatorTransactions.createdAt,
     })
     .from(creatorTransactions)
-    .leftJoin(creatorProfile, eq(creatorTransactions.creatorId, creatorProfile.id));
-
-  if (whereClause) {
-    payoutsQuery = payoutsQuery.where(whereClause);
-  }
-
-  const rows = await payoutsQuery
+    .leftJoin(
+      creatorProfile,
+      eq(creatorTransactions.creatorId, creatorProfile.id),
+    )
+    .where(whereClause)
     .orderBy(desc(creatorTransactions.createdAt))
     .limit(safePageSize)
     .offset(offset);
 
-  let countQuery = db
+  const countQuery = db
     .select({ count: sql<number>`COUNT(*)` })
     .from(creatorTransactions)
-    .leftJoin(creatorProfile, eq(creatorTransactions.creatorId, creatorProfile.id));
-
-  if (whereClause) {
-    countQuery = countQuery.where(whereClause);
-  }
+    .leftJoin(
+      creatorProfile,
+      eq(creatorTransactions.creatorId, creatorProfile.id),
+    )
+    .where(whereClause || sql`1=1`);
 
   const [{ count = 0 }] = await countQuery;
 
@@ -685,8 +671,11 @@ export async function processPayout({ payoutId, status }) {
 }
 
 export async function listAuditLogs({ page, pageSize }) {
-  const { page: safePage, pageSize: safePageSize, offset } =
-    normalizePagination(page, pageSize);
+  const {
+    page: safePage,
+    pageSize: safePageSize,
+    offset,
+  } = normalizePagination(page, pageSize);
 
   const rows = await db
     .select({
