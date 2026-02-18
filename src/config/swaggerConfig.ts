@@ -10,9 +10,9 @@ const options = {
       description: "API documentation for Comic App",
     },
     servers: [
-      // {
-      //   url: "https://nerdworkbackend-production.up.railway.app/",
-      // },
+      {
+        url: "https://nerdworkbackend-production.up.railway.app/",
+      },
       {
         url: "http://localhost:5000/",
       },
