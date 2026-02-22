@@ -105,13 +105,6 @@ const s3Client = new S3Client({
 
 export const uploadToS3 = async (req: any, res: any) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-      return res
-        .status(401)
-        .json({ success: false, error: "No token provided" });
-    }
-
     const userId = getUserJwtFromToken(req);
     if (!userId) {
       return res.status(401).json({ success: false, error: "Invalid token" });
@@ -178,6 +171,7 @@ export const uploadToS3 = async (req: any, res: any) => {
     });
   } catch (error) {
     console.error("Upload error:", error);
+
     return res.status(500).json({
       success: false,
       error: "Internal server error",

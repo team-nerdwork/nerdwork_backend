@@ -57,11 +57,15 @@ const router = Router();
  *                 description: Royalty in basis points (500 = 5%, 1000 = 10%)
  *                 example: 500
  *               tags:
- *                 type: string
+ *                 type: array
+ *                 items:
+ *                   type: string
  *                 description: JSON stringified array of tags
  *                 example: ["rain", "comic", "limited"]
  *               properties:
- *                 type: string
+ *                 type: array
+ *                 items:
+ *                   type: object
  *                 description: JSON stringified array of NFT attributes
  *                 example: [{"trait_type":"Weather","value":"Rainy"}]
  *

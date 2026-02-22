@@ -56,8 +56,17 @@ export const mintNft = async (req: Request, res: Response) => {
       });
     }
 
-    const parsedTags = tags ? JSON.parse(tags) : [];
-    const parsedProperties = properties ? JSON.parse(properties) : [];
+    let parsedTags: string[] = [];
+    let parsedProperties: any[] = [];
+
+    if (tags) {
+      parsedTags = typeof tags === "string" ? JSON.parse(tags) : tags;
+    }
+
+    if (properties) {
+      parsedProperties =
+        typeof properties === "string" ? JSON.parse(properties) : properties;
+    }
 
     const result = await db.transaction(async (tx) => {
       // 1️⃣ Create NFT in draft
