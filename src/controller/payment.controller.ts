@@ -13,6 +13,7 @@ import {
   CreatePaylinkHookByApiKeyDto,
   CreatePaylinkWithApiDto,
 } from "@heliofi/common";
+import { verifyPayment } from "../services/paymentVerification.service";
 
 // const HELIO_API_BASE = "https://api.dev.hel.io/v1";
 const HELIO_API_BASE = "https://api.hel.io/v1"; // For production
@@ -45,25 +46,58 @@ export const createPaymentLink = async (req: any, res: any) => {
   console.log(userId);
 
   try {
-    const { amount, name, redirectUrl } = req.body;
+    const { amount, name, redirectUrl, paymentMethod = "helio" } = req.body;
 
     if (!amount) {
       return res.status(400).json({
-        error: "Missing required fields: amount, currency, name",
+        error: "Amount is required",
       });
     }
-    // const currencies = await sdk.currency.getAllCurrencies();
-    // return res.status(200).json({
-    //     success: true,
-    //     currencies
-    // });
 
-    // Prepare DTO for Helio
+    if (!paymentMethod || !["helio", "paystack"].includes(paymentMethod)) {
+      return res.status(400).json({
+        error: "Payment method is required and must be 'helio' or 'paystack'",
+      });
+    }
+
+    if (paymentMethod === "paystack") {
+      return createPaystackPayment(req, res, userId, amount);
+    } else {
+      return createHelioPaymentLink(
+        req,
+        res,
+        userId,
+        amount,
+        name,
+        redirectUrl,
+      );
+    }
+  } catch (error: any) {
+    console.error("Payment link creation error:", error);
+    res.status(500).json({
+      error: "Failed to create payment link",
+      details: error.message,
+    });
+  }
+};
+
+/**
+ * Create Helio Payment Link
+ */
+const createHelioPaymentLink = async (
+  req: any,
+  res: any,
+  userId: string,
+  amount: number,
+  name: string = "NWT_PURCHASE",
+  redirectUrl: string = "",
+) => {
+  try {
     const createPaylinkDto: CreatePaylinkWithApiDto = {
-      name: "NWT_PURCHASE", // Unique name for each payment link
-      price: (Number(amount) * HELIO_AMOUNT).toString(), // Ensure amount is a number
+      name: "NWT_PURCHASE",
+      price: (Number(amount) * HELIO_AMOUNT).toString(),
       pricingCurrency: HELIO_PCURRENCY,
-      description: `Payment for Nerd Work Token by ${userId} on ${new Date().toISOString()} amount: ${amount} `,
+      description: `Payment for Nerd Work Token by ${userId} on ${new Date().toISOString()} amount: ${amount}`,
       features: {},
       redirectUrl,
       recipients: [
@@ -74,31 +108,27 @@ export const createPaymentLink = async (req: any, res: any) => {
       ],
     };
 
-    // Call Helio SDK
     const helioResponse = await sdk.paylink.create(createPaylinkDto);
 
-    // Calculate NWT amount (assuming 1 USD = 90.49 NWT based on your frontend calculation)
-    const nwtAmount = amount * 10; // This should match your frontend calculation
+    const nwtAmount = amount * 10;
 
-    // Create user purchase transaction record
     const transactionResult = await createUserPurchaseTransaction(
       userId,
       nwtAmount,
-      amount, // USD amount
+      amount,
+      "helio",
       helioResponse.id,
-      `Purchase ${nwtAmount} NWT for $${amount} via Helio`
+      `Purchase ${nwtAmount} NWT for $${amount} via Helio`,
     );
 
     if (!transactionResult.success) {
       console.error(
         "Failed to create transaction record:",
-        transactionResult.error
+        transactionResult.error,
       );
-      // Continue anyway - we can still process the payment
     }
 
     console.log("Helio payment created:", helioResponse.id);
-    console.log("Transaction record created:", transactionResult);
 
     res.json({
       success: true,
@@ -107,14 +137,113 @@ export const createPaymentLink = async (req: any, res: any) => {
       transactionId: transactionResult.transaction?.id,
       nwtAmount,
       usdAmount: amount,
+      paymentMethod: "helio",
     });
   } catch (error: any) {
     console.error(
       "Helio payment link creation error:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     res.status(500).json({
-      error: "Failed to create payment link",
+      error: "Failed to create Helio payment link",
+      details: error.response?.data || error.message,
+    });
+  }
+};
+
+/**
+ * Create Paystack Payment
+ */
+const createPaystackPayment = async (
+  req: any,
+  res: any,
+  userId: string,
+  amount: number,
+) => {
+  try {
+    const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;
+
+    if (!paystackSecretKey) {
+      return res.status(500).json({
+        error: "Paystack configuration missing",
+      });
+    }
+
+    const [reader] = await db
+      .select()
+      .from(readerProfile)
+      .where(eq(readerProfile.userId, userId));
+
+    if (!reader) {
+      return res.status(404).json({
+        error: "Reader profile not found",
+      });
+    }
+
+    const exchangeRate = Number(process.env.USD_TO_NGN_RATE) || 1550;
+    const amountInNaira = Math.round(amount * exchangeRate);
+
+    const paystackResponse = await axios.post(
+      "https://api.paystack.co/transaction/initialize",
+      {
+        email: reader.email || `user_${userId}@nerdwork.ng`,
+        amount: amountInNaira * 100,
+        metadata: {
+          userId,
+          nwtAmount: amount * 10,
+          usdAmount: amount,
+          description: `Purchase ${amount * 10} NWT for $${amount}`,
+        },
+        callback_url: process.env.PAYSTACK_CALLBACK_URL || "",
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${paystackSecretKey}`,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    const paymentData = paystackResponse.data.data;
+    const nwtAmount = amount * 10;
+
+    const transactionResult = await createUserPurchaseTransaction(
+      userId,
+      nwtAmount,
+      amount,
+      "paystack",
+      paymentData.reference,
+      `Purchase ${nwtAmount} NWT for $${amount} via Paystack`,
+    );
+
+    if (!transactionResult.success) {
+      console.error(
+        "Failed to create transaction record:",
+        transactionResult.error,
+      );
+    }
+
+    console.log("Paystack payment initialized:", paymentData.reference);
+
+    res.json({
+      success: true,
+      data: paymentData,
+      reference: paymentData.reference,
+      authorizationUrl: paymentData.authorization_url,
+      accessCode: paymentData.access_code,
+      transactionId: transactionResult.transaction?.id,
+      nwtAmount,
+      usdAmount: amount,
+      amountInNaira,
+      paymentMethod: "paystack",
+    });
+  } catch (error: any) {
+    console.error(
+      "Paystack payment creation error:",
+      error.response?.data || error.message,
+    );
+    res.status(500).json({
+      error: "Failed to create Paystack payment",
       details: error.response?.data || error.message,
     });
   }
@@ -143,9 +272,8 @@ export const createWebhookForPayment = async (req: any, res: any) => {
       paylinkId: paymentId,
     };
 
-    const response = await sdk.paylinkWebhook.createPaylinkWebhook(
-      webhookPayload
-    );
+    const response =
+      await sdk.paylinkWebhook.createPaylinkWebhook(webhookPayload);
     console.log("Webhook created successfully:", response);
     // add paymet update
     // await db.update(payments)
@@ -159,7 +287,7 @@ export const createWebhookForPayment = async (req: any, res: any) => {
   } catch (error: any) {
     console.error(
       "Helio payment webhhok :",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     res.status(500).json({
       error: "Failed to create webhook",
@@ -184,7 +312,7 @@ export const createWebhookForPayment = async (req: any, res: any) => {
 
 export const handlePayment = async (req: any, res: any) => {
   try {
-    console.log("Webhook received:", req.body);
+    console.log("Helio Webhook received:", req.body);
     const { transaction: txHash, data, blockchainSymbol, senderPK } = req.body;
 
     if (!data || !data.transactionSignature) {
@@ -194,81 +322,229 @@ export const handlePayment = async (req: any, res: any) => {
 
     const { transactionSignature, status, statusToken } = data;
 
-    const transaction = await sdk.transaction.getTransaction(
-      transactionSignature
-    );
-
-    console.log("Processing webhook:", {
+    console.log("Processing Helio webhook:", {
       status,
       transactionSignature,
       blockchainSymbol,
     });
 
-    // Find the transaction by transaction signature or other identifier
-    // Note: You'll need to store the transaction signature when creating the payment
-    // For now, we'll try to match by metadata or implement a lookup mechanism
-
     if (status === "SUCCESS") {
-      // For successful payments, we need to:
-      // 1. Update the transaction status
-      // 2. Add NWT to user's wallet
+      console.log("Helio payment successful, processing...");
 
-      console.log("Payment successful, processing...");
+      const verificationResult = await verifyPayment(
+        "helio",
+        transactionSignature,
+        { status },
+      );
 
-      // You might need to implement a way to map the blockchain transaction
-      // back to your Helio payment ID. For now, this is a placeholder:
+      if (!verificationResult.verified) {
+        console.error("Helio payment verification failed:", verificationResult);
+        return res.status(400).json({
+          error: "Payment verification failed",
+          details: verificationResult.error,
+        });
+      }
 
-      // Example: If you store the transaction signature in metadata
       const updateResult = await updateUserTransactionStatus(
-        (transaction as any).paylink.id, // Using tx signature as lookup - you may need to adjust this
+        "helio",
+        transactionSignature,
         "completed",
-        transaction.meta.transactionDataHash,
+        transactionSignature,
         {
-          blockchainSymbol: transaction.paymentRequestCurrencySymbol,
+          blockchainSymbol,
           senderPK,
           statusToken,
           webhookData: req.body,
-        }
+          verificationResult,
+        },
       );
+
       console.log("Transaction update result:", updateResult);
 
       if (updateResult.success && updateResult.transaction) {
-        // Update user wallet balance
         const balanceResult = await updateUserWalletBalance(
           updateResult.transaction.userId,
           parseFloat(Number(updateResult.transaction.nwtAmount).toFixed(0)),
-          "add"
+          "add",
         );
         console.log("Balance update result:", balanceResult);
 
-        console.log("Transaction completed:", {
+        console.log("Helio transaction completed:", {
           transactionId: updateResult.transaction.id,
           balanceUpdated: balanceResult.success,
           newBalance: balanceResult.newBalance,
         });
       }
     } else {
-      // Handle failed transactions
-      console.log("Payment failed or pending:", status);
+      console.log("Helio payment failed or pending:", status);
 
       await updateUserTransactionStatus(
-        (transaction as any).paylink.id,
+        "helio",
+        transactionSignature,
         "failed",
-        transaction.meta.transactionDataHash,
+        transactionSignature,
         {
-          blockchainSymbol: transaction.paymentRequestCurrencySymbol,
+          blockchainSymbol,
           senderPK,
           statusToken,
           webhookData: req.body,
         },
-        `Payment failed with status: ${status}`
+        `Helio payment failed with status: ${status}`,
       );
     }
 
     res.status(200).json({ success: true });
   } catch (error: any) {
-    console.error("Error handling payment webhook:", error.message);
+    console.error("Error handling Helio payment webhook:", error.message);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+/**
+ * Handle Paystack Payment Webhook/Verification
+ */
+export const handlePaystackPayment = async (req: any, res: any) => {
+  try {
+    console.log("Paystack webhook received:", req.body);
+
+    const { reference } = req.body;
+
+    if (!reference) {
+      console.log("Paystack reference missing");
+      return res.status(400).json({ error: "Paystack reference is required" });
+    }
+
+    // Verify the payment with Paystack
+    const verificationResult = await verifyPayment("paystack", reference);
+
+    if (!verificationResult.verified) {
+      console.error(
+        "Paystack payment verification failed:",
+        verificationResult,
+      );
+
+      // Update transaction as failed
+      await updateUserTransactionStatus(
+        "paystack",
+        reference,
+        "failed",
+        undefined,
+        { verificationResult },
+        verificationResult.error,
+      );
+
+      return res.status(400).json({
+        error: "Payment verification failed",
+        details: verificationResult.error,
+      });
+    }
+
+    console.log("Paystack payment verified successfully");
+
+    // Update transaction status to completed
+    const updateResult = await updateUserTransactionStatus(
+      "paystack",
+      reference,
+      "completed",
+      undefined,
+      {
+        metadata: verificationResult.metadata,
+        verificationResult,
+      },
+    );
+
+    console.log("Paystack transaction update result:", updateResult);
+
+    if (updateResult.success && updateResult.transaction) {
+      // Credit wallet with NWT
+      const balanceResult = await updateUserWalletBalance(
+        updateResult.transaction.userId,
+        parseFloat(Number(updateResult.transaction.nwtAmount).toFixed(0)),
+        "add",
+      );
+
+      console.log("Balance update result:", balanceResult);
+
+      console.log("Paystack transaction completed:", {
+        transactionId: updateResult.transaction.id,
+        reference,
+        balanceUpdated: balanceResult.success,
+        newBalance: balanceResult.newBalance,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Payment verified and wallet credited",
+      transactionId: updateResult.transaction?.id,
+    });
+  } catch (error: any) {
+    console.error("Error handling Paystack payment:", error.message);
+    res
+      .status(500)
+      .json({ error: "Internal Server Error", details: error.message });
+  }
+};
+
+/**
+ * Verify Payment Status (for client-side polling)
+ * Allows frontend to check payment status without waiting for webhook
+ */
+export const verifyPaymentStatus = async (req: any, res: any) => {
+  try {
+    const { paymentMethod, reference } = req.body;
+
+    if (!paymentMethod || !reference) {
+      return res.status(400).json({
+        error: "paymentMethod and reference are required",
+      });
+    }
+
+    const verificationResult = await verifyPayment(
+      paymentMethod as "helio" | "paystack",
+      reference,
+    );
+
+    if (verificationResult.success && verificationResult.verified) {
+      // Update transaction if not already updated
+      const updateResult = await updateUserTransactionStatus(
+        paymentMethod,
+        reference,
+        "completed",
+        undefined,
+        { verificationResult },
+      );
+
+      if (updateResult.success && updateResult.transaction) {
+        // Credit wallet if not already credited
+        await updateUserWalletBalance(
+          updateResult.transaction.userId,
+          parseFloat(Number(updateResult.transaction.nwtAmount).toFixed(0)),
+          "add",
+        );
+      }
+
+      return res.status(200).json({
+        success: true,
+        verified: true,
+        status: "completed",
+        transactionId: updateResult.transaction?.id,
+        nwtAmount: verificationResult.nwtAmount,
+        usdAmount: verificationResult.usdAmount,
+      });
+    }
+
+    res.status(200).json({
+      success: verificationResult.success,
+      verified: verificationResult.verified,
+      status: verificationResult.status,
+      error: verificationResult.error,
+    });
+  } catch (error: any) {
+    console.error("Error verifying payment status:", error.message);
+    res
+      .status(500)
+      .json({ error: "Internal Server Error", details: error.message });
   }
 };
 

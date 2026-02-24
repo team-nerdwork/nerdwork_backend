@@ -84,6 +84,28 @@ export const createChapter = async (req, res) => {
       ? pages.map((p) => extractFilePath(p))
       : [];
 
+    // Validate: If paid chapter, creator must have at least 3 free chapters
+    if (chapterType === "paid") {
+      const [freeChapterCount] = await db
+        .select({ count: sql<number>`COUNT(${chapters.id})` })
+        .from(chapters)
+        .where(
+          and(
+            eq(chapters.comicId, comicId),
+            eq(chapters.chapterType, "free"),
+            eq(chapters.chapterStatus, "published"),
+          ),
+        );
+
+      if ((freeChapterCount?.count || 0) < 3) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "You must have at least 3 free chapters before uploading paid chapters",
+        });
+      }
+    }
+
     // Get the last published chapter for serial numbering
     const [lastChapter] = await db
       .select({ maxSerial: sql<number>`MAX(${chapters.serialNo})` })

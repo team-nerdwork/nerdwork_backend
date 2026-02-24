@@ -9,6 +9,8 @@ import {
   nftOwnershipHistory,
   nftOwnerships,
   readerProfile,
+  userTransactions,
+  creatorTransactions,
 } from "../model/schema";
 import { getUserJwtFromToken } from "./library.controller";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
@@ -558,6 +560,45 @@ export const buyNft = async (req: Request, res: Response) => {
           },
         })
         .returning();
+
+      // Create user transaction (reader purchase)
+      await tx.insert(userTransactions).values({
+        userId: reader.id,
+        transactionType: "spend",
+        status: "completed",
+        nwtAmount: totalPrice.toString(),
+        description: `NFT Purchase: ${nft.title} (Quantity: ${quantity})`,
+        spendCategory: "nft_purchase",
+        contentId: nft.id,
+        creatorId: listing.sellerId,
+        metadata: {
+          nftOrderId: order.id,
+          listingId: listing.id,
+          unitPrice: pricePerUnit,
+          quantity,
+        },
+      });
+
+      // Create creator transaction (seller earning)
+      await tx.insert(creatorTransactions).values({
+        creatorId: listing.sellerId,
+        transactionType: "earning",
+        status: "completed",
+        nwtAmount: sellerAmount.toString(),
+        description: `NFT Sale: ${nft.title} (Quantity: ${quantity})`,
+        earningSource: "nft_purchase",
+        contentId: nft.id,
+        purchaserUserId: reader.id,
+        grossAmount: totalPrice.toString(),
+        platformFee: platformFee.toString(),
+        platformFeePercentage: (platformFeePercent * 100).toString(),
+        metadata: {
+          nftOrderId: order.id,
+          listingId: listing.id,
+          unitPrice: pricePerUnit,
+          quantity,
+        },
+      });
 
       // Update ownership
       const [existingOwnership] = await tx

@@ -20,8 +20,9 @@ export const createUserPurchaseTransaction = async (
   userId: string,
   nwtAmount: number,
   usdAmount: number,
-  helioPaymentId: string,
-  description?: string
+  paymentMethod: "helio" | "paystack",
+  paymentId: string,
+  description?: string,
 ) => {
   try {
     // First get the reader profile ID from user ID
@@ -34,19 +35,28 @@ export const createUserPurchaseTransaction = async (
       throw new Error("Reader profile not found");
     }
 
+    // Prepare transaction data based on payment method
+    const transactionData: any = {
+      userId: reader.id,
+      transactionType: "purchase",
+      status: "pending",
+      nwtAmount: nwtAmount.toString(),
+      usdAmount: usdAmount.toString(),
+      description: description || `Purchase ${nwtAmount} NWT for $${usdAmount}`,
+    };
+
+    // Store payment ID based on payment method
+    if (paymentMethod === "helio") {
+      transactionData.helioPaymentId = paymentId;
+    } else if (paymentMethod === "paystack") {
+      transactionData.paystackPaymentId = paymentId;
+    }
+
     const [transaction] = await db
       .insert(userTransactions)
-      .values({
-        userId: reader.id, // Use reader.id, not userId
-        transactionType: "purchase",
-        status: "pending",
-        nwtAmount: nwtAmount.toString(),
-        usdAmount: usdAmount.toString(),
-        description:
-          description || `Purchase ${nwtAmount} NWT for $${usdAmount}`,
-        helioPaymentId,
-      })
+      .values(transactionData)
       .returning();
+
     console.log("Created user purchase transaction:", transaction);
 
     return { success: true, transaction };
@@ -58,13 +68,15 @@ export const createUserPurchaseTransaction = async (
 
 /**
  * Update user transaction status (for webhook confirmations)
+ * Supports both Helio and Paystack payment methods
  */
 export const updateUserTransactionStatus = async (
-  helioPaymentId: string,
+  paymentMethod: "helio" | "paystack",
+  paymentId: string,
   status: "completed" | "failed" | "refunded",
   blockchainTxHash?: string,
   metadata?: any,
-  failureReason?: string
+  failureReason?: string,
 ) => {
   try {
     const updateData: any = {
@@ -76,11 +88,24 @@ export const updateUserTransactionStatus = async (
     if (metadata) updateData.metadata = metadata;
     if (failureReason) updateData.failureReason = failureReason;
 
-    const [updatedTransaction] = await db
-      .update(userTransactions)
-      .set(updateData)
-      .where(eq(userTransactions.helioPaymentId, helioPaymentId))
-      .returning();
+    let query;
+
+    if (paymentMethod === "helio") {
+      query = db
+        .update(userTransactions)
+        .set(updateData)
+        .where(eq(userTransactions.helioPaymentId, paymentId));
+    } else if (paymentMethod === "paystack") {
+      query = db
+        .update(userTransactions)
+        .set(updateData)
+        .where(eq(userTransactions.paystackReference, paymentId));
+    } else {
+      throw new Error("Unsupported payment method");
+    }
+
+    const [updatedTransaction] = await query.returning();
+
     console.log("Updated user transaction:", updatedTransaction);
     return { success: true, transaction: updatedTransaction };
   } catch (error) {
@@ -104,7 +129,7 @@ export const createUserSpendTransaction = async (
     | "marketplace_purchase",
   contentId: string,
   creatorId: string,
-  description?: string
+  description?: string,
 ) => {
   try {
     const [transaction] = await db
@@ -135,7 +160,7 @@ export const createUserSpendTransaction = async (
 export const updateUserWalletBalance = async (
   userId: string,
   nwtAmount: number,
-  operation: "add" | "subtract" = "add"
+  operation: "add" | "subtract" = "add",
 ) => {
   try {
     // Get user profile with wallet
@@ -192,7 +217,7 @@ export const createCreatorEarningTransaction = async (
     | "subscription_revenue",
   contentId: string,
   purchaserUserId: string,
-  sourceUserTransactionId: string
+  sourceUserTransactionId: string,
 ) => {
   try {
     const platformFee = grossAmount * platformFeePercentage;
@@ -229,7 +254,7 @@ export const createCreatorEarningTransaction = async (
 export const updateCreatorWalletBalance = async (
   creatorId: string,
   nwtAmount: number,
-  operation: "add" | "subtract" = "add"
+  operation: "add" | "subtract" = "add",
 ) => {
   try {
     // Get creator profile
@@ -277,7 +302,7 @@ export const processContentPurchase = async (
   contentId: string,
   nwtAmount: number,
   contentType: "chapter_unlock" | "comic_purchase",
-  platformFeePercentage: number = 0.3
+  platformFeePercentage: number = 0.3,
 ) => {
   try {
     // Start transaction
@@ -286,7 +311,7 @@ export const processContentPurchase = async (
       const balanceCheck = await updateUserWalletBalance(
         readerId,
         nwtAmount,
-        "subtract"
+        "subtract",
       );
       if (!balanceCheck.success) {
         throw new Error(balanceCheck.error as string);
@@ -299,7 +324,7 @@ export const processContentPurchase = async (
         contentType,
         contentId,
         creatorId,
-        `Purchased ${contentType} for ${nwtAmount} NWT`
+        `Purchased ${contentType} for ${nwtAmount} NWT`,
       );
 
       if (!userTransaction.success) {
@@ -316,7 +341,7 @@ export const processContentPurchase = async (
           : "comic_purchase",
         contentId,
         readerId,
-        userTransaction.transaction!.id
+        userTransaction.transaction!.id,
       );
 
       if (!creatorTransaction.success) {
@@ -327,7 +352,7 @@ export const processContentPurchase = async (
       const creatorBalanceUpdate = await updateCreatorWalletBalance(
         creatorId,
         creatorTransaction.netAmount!,
-        "add"
+        "add",
       );
 
       if (!creatorBalanceUpdate.success) {

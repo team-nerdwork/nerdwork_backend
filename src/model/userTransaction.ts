@@ -61,10 +61,16 @@ export const userTransactions = pgTable("user_transactions", {
   // For purchase transactions - Helio payment info
   helioPaymentId: varchar("helio_payment_id", { length: 255 }),
   helioWebhookId: varchar("helio_webhook_id", { length: 255 }),
+
+  // For purchase transactions - Paystack payment info
+  paystackPaymentId: varchar("paystack_payment_id", { length: 255 }),
+  paystackReference: varchar("paystack_reference", { length: 255 }),
+
+  // Blockchain transaction hash
   blockchainTxHash: varchar("blockchain_tx_hash", { length: 255 }),
 
   // Additional data
-  metadata: jsonb("metadata"), // Store Helio response, error details, etc.
+  metadata: jsonb("metadata"), // Store Helio/Paystack response, error details, etc.
   failureReason: text("failure_reason"),
 
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

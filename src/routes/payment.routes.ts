@@ -3,6 +3,8 @@ import {
   createPaymentLink,
   createWebhookForPayment,
   handlePayment,
+  handlePaystackPayment,
+  verifyPaymentStatus,
 } from "../controller/payment.controller";
 
 const router = Router();
@@ -243,5 +245,133 @@ router.post("/helio/webhook/create", createWebhookForPayment);
  *                   example: "Internal Server Error"
  */
 router.post("/helio/handle", handlePayment);
+
+/**
+ * @swagger
+ * /payment/link:
+ *   post:
+ *     summary: Create a payment link (supports Helio and Paystack)
+ *     description: Creates a payment link for purchasing NWT tokens with support for multiple payment methods (Helio or Paystack).
+ *     tags:
+ *       - Payment
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - paymentMethod
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: Amount in USD
+ *                 example: 10
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: ['helio', 'paystack']
+ *                 description: Payment method to use
+ *                 example: "paystack"
+ *               name:
+ *                 type: string
+ *                 description: Optional name for tracking
+ *                 example: "NWT_Purchase"
+ *               redirectUrl:
+ *                 type: string
+ *                 description: Optional redirect URL after payment
+ *     responses:
+ *       200:
+ *         description: Payment link created successfully
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.post("/link", createPaymentLink);
+
+/**
+ * @swagger
+ * /payment/paystack/webhook:
+ *   post:
+ *     summary: Handle Paystack webhook
+ *     description: Webhook endpoint for Paystack to send payment confirmation events
+ *     tags:
+ *       - Payment
+ *       - Webhooks
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reference:
+ *                 type: string
+ *                 description: Paystack payment reference
+ *                 example: "transaction_ref_123"
+ *     responses:
+ *       200:
+ *         description: Webhook processed successfully
+ *       400:
+ *         description: Bad request - missing reference
+ *       500:
+ *         description: Server error
+ */
+router.post("/paystack/webhook", handlePaystackPayment);
+
+/**
+ * @swagger
+ * /payment/verify:
+ *   post:
+ *     summary: Verify payment status
+ *     description: Verify the status of a payment and credit wallet if verified. Useful for client-side polling.
+ *     tags:
+ *       - Payment
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - paymentMethod
+ *               - reference
+ *             properties:
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: ['helio', 'paystack']
+ *                 description: Payment method
+ *               reference:
+ *                 type: string
+ *                 description: Payment reference (transaction signature for Helio, reference for Paystack)
+ *     responses:
+ *       200:
+ *         description: Payment status verified
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 verified:
+ *                   type: boolean
+ *                 status:
+ *                   type: string
+ *                 transactionId:
+ *                   type: string
+ *                 nwtAmount:
+ *                   type: number
+ *       400:
+ *         description: Bad request
+ *       500:
+ *         description: Server error
+ */
+router.post("/verify", verifyPaymentStatus);
 
 export default router;
