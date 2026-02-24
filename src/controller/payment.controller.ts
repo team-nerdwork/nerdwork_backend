@@ -6,6 +6,7 @@ import {
   payments,
   readerProfile,
   userProfiles,
+  authUsers,
 } from "../model/schema";
 import axios from "axios";
 import { sdk } from "../config/helio.config";
@@ -180,13 +181,21 @@ const createPaystackPayment = async (
       });
     }
 
+    // Get email from authUsers table
+    const [authUser] = await db
+      .select()
+      .from(authUsers)
+      .where(eq(authUsers.id, userId));
+
+    const userEmail = authUser?.email || `user_${userId}@nerdwork.ng`;
+
     const exchangeRate = Number(process.env.USD_TO_NGN_RATE) || 1550;
     const amountInNaira = Math.round(amount * exchangeRate);
 
     const paystackResponse = await axios.post(
       "https://api.paystack.co/transaction/initialize",
       {
-        email: reader.email || `user_${userId}@nerdwork.ng`,
+        email: userEmail,
         amount: amountInNaira * 100,
         metadata: {
           userId,

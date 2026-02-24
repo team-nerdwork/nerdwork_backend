@@ -27,13 +27,14 @@ export const creatorTransactionStatusEnum = pgEnum(
     "completed",
     "processing", // For withdrawals being processed
     "failed",
-  ]
+  ],
 );
 
 // What content earned money
 export const earningSourceEnum = pgEnum("earning_source", [
   "chapter_purchase",
   "comic_purchase",
+  "nft_purchase",
   "tip_received",
   "subscription_revenue",
   "platform_bonus",
@@ -61,7 +62,7 @@ export const creatorTransactions = pgTable("creator_transactions", {
   contentId: uuid("content_id"), // chapter/comic that was purchased
   purchaserUserId: uuid("purchaser_user_id"), // Who bought the content
   sourceUserTransactionId: uuid("source_user_transaction_id").references(
-    () => userTransactions.id
+    () => userTransactions.id,
   ), // Link to the user transaction that generated this earning
 
   // Revenue split info
