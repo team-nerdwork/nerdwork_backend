@@ -195,6 +195,7 @@ export const getMyMintedNfts = async (req: Request, res: Response) => {
 
       // Royalty
       royaltyBps: nft.royaltyBps,
+      price: 0, // price is determined at listing, not part of NFT definition
 
       // Lifecycle
       status: nft.status,
@@ -591,7 +592,7 @@ export const buyNft = async (req: Request, res: Response) => {
         purchaserUserId: reader.id,
         grossAmount: totalPrice.toString(),
         platformFee: platformFee.toString(),
-        platformFeePercentage: (platformFeePercent * 100).toString(),
+        platformFeePercentage: platformFeePercent.toString(),
         metadata: {
           nftOrderId: order.id,
           listingId: listing.id,

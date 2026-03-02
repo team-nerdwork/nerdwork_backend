@@ -212,6 +212,8 @@ export const createCreatorEarningTransaction = async (
   platformFeePercentage: number = 0.3, // 30% platform fee
   earningSource:
     | "chapter_purchase"
+    | "nft_purchase"
+    | "platform_bonus"
     | "comic_purchase"
     | "tip_received"
     | "subscription_revenue",

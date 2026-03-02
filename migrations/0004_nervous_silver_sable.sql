@@ -1,0 +1,1 @@
+ALTER TYPE "public"."earning_source" ADD VALUE 'nft_purchase' BEFORE 'tip_received';
